@@ -89,7 +89,26 @@ bool load_profiles(const std::string& path, std::vector<Profile>& out,
             return false;
         };
 
-        if (key == "domains") {
+        if (key == "interfaces") {
+            current->interfaces.clear();
+            std::size_t start = 0;
+            while (start <= val.size()) {
+                std::size_t comma = val.find(',', start);
+                if (comma == std::string::npos) comma = val.size();
+                std::string itf = trim(std::string_view(val).substr(start, comma - start));
+                if (itf.empty() || itf.size() >= 16) return bad("interface");
+                for (char c : itf)
+                    if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '-' ||
+                          c == '_' || c == '.'))
+                        return bad("interface");
+                if (std::find(current->interfaces.begin(), current->interfaces.end(), itf) ==
+                    current->interfaces.end())
+                    current->interfaces.push_back(std::move(itf));
+                if (comma == val.size()) break;
+                start = comma + 1;
+            }
+            if (current->interfaces.empty()) return bad("interfaces");
+        } else if (key == "domains") {
             current->domains.clear();
             std::size_t start = 0;
             while (start <= val.size()) {

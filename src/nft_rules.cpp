@@ -15,6 +15,7 @@ namespace {
 constexpr const char* kNftBinary = "/usr/bin/nft";
 constexpr const char* kOwnerComment = "mutekizu-v1";
 constexpr const char* kUdpChainName = "udp_output";
+constexpr const char* kReplyChainName = "reply";
 
 std::string hex32(std::uint32_t v)
 {
@@ -144,6 +145,21 @@ std::string render_ruleset(const Config& cfg, const AddressSet& mss_targets)
            << " ct original packets 0-" << cfg.inspect_packets
            << " queue num " << cfg.queue_num << " bypass"
            << " comment \"" << kQueueComment << "\"\n"
+           << "  }\n";
+    }
+
+    if (cfg.reply_observe) {
+        os << "  chain " << kReplyChainName << " {\n"
+           << "    type filter hook input priority -150; policy accept;\n"
+           << "    meta mark != " << hex32(cfg.fwmark) << " ";
+        if (cfg.enable_ipv4 && !cfg.enable_ipv6)
+            os << "meta nfproto ipv4 ";
+        else if (!cfg.enable_ipv4 && cfg.enable_ipv6)
+            os << "meta nfproto ipv6 ";
+        os << "tcp sport " << port_set(cfg)
+           << " ct reply packets 0-" << cfg.reply_inspect_packets
+           << " queue num " << cfg.reply_queue_num << " bypass"
+           << " comment \"" << kQueueComment << "-reply\"\n"
            << "  }\n";
     }
 

@@ -217,6 +217,14 @@ Item {
                     }
                     Text { text: qsTr("Сколько fake STUN отправить на каждый UDP-пакет."); color: Theme.muted; font.family: Theme.font; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
 
+                    Text { text: qsTr("udp_fake_type"); color: Theme.text; font.family: Theme.font }
+                    ComboBox {
+                        model: ["stun", "quic", "discord", "random"]
+                        currentIndex: Math.max(0, model.indexOf(backend.draft["udp_fake_type"] ?? "stun"))
+                        onActivated: backend.setSetting("udp_fake_type", model[index])
+                    }
+                    Text { text: qsTr("Тип fake UDP: STUN для voice, QUIC для UDP/443, discord RTP или случайные байты."); color: Theme.muted; font.family: Theme.font; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+
                     Text { text: qsTr("fake_enabled"); color: Theme.warn; font.family: Theme.font }
                     Switch {
                         Material.accent: Theme.accent
@@ -240,6 +248,30 @@ Item {
                         onValueModified: page.setInt("fake_repeats", value)
                     }
                     Text { text: qsTr("Сколько fake-пакетов отправить."); color: Theme.muted; font.family: Theme.font; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+
+                    Text { text: qsTr("fake_bad_checksum"); color: Theme.warn; font.family: Theme.font }
+                    Switch {
+                        Material.accent: Theme.accent
+                        checked: backend.draft["fake_bad_checksum"] === true
+                        onToggled: backend.setSetting("fake_bad_checksum", checked)
+                    }
+                    Text { text: qsTr("Портить TCP checksum у fake-пакета. Некоторые DPI отбрасывают такой пакет, не трогая поток."); color: Theme.warn; font.family: Theme.font; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+
+                    Text { text: qsTr("fake_seq_offset"); color: Theme.text; font.family: Theme.font }
+                    SpinBox {
+                        from: -32768; to: 32767
+                        value: backend.draft["fake_seq_offset"] ?? 0
+                        onValueModified: page.setInt("fake_seq_offset", value)
+                    }
+                    Text { text: qsTr("Сдвиг TCP sequence у fake."); color: Theme.muted; font.family: Theme.font; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+
+                    Text { text: qsTr("fake_timestamp"); color: Theme.text; font.family: Theme.font }
+                    Switch {
+                        Material.accent: Theme.accent
+                        checked: backend.draft["fake_timestamp"] === true
+                        onToggled: backend.setSetting("fake_timestamp", checked)
+                    }
+                    Text { text: qsTr("Добавлять TCP timestamp option в fake."); color: Theme.muted; font.family: Theme.font; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
 
                     Text { text: qsTr("fake_sni"); color: Theme.text; font.family: Theme.font }
                     TextField {
@@ -335,6 +367,30 @@ Item {
                         Text { text: "IPv6"; color: Theme.muted; font.family: Theme.font; font.pixelSize: 11 }
                     }
                     Text { text: qsTr("Должен быть включён хотя бы один стек."); color: Theme.muted; font.family: Theme.font; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+
+                    Text { text: qsTr("reply_observe"); color: Theme.text; font.family: Theme.font }
+                    Switch {
+                        Material.accent: Theme.accent
+                        checked: backend.draft["reply_observe"] !== false
+                        onToggled: backend.setSetting("reply_observe", checked)
+                    }
+                    Text { text: qsTr("Слушать первые reply-пакеты в отдельной NFQUEUE и точно определять ServerHello для автоподбора. Дороже по CPU."); color: Theme.muted; font.family: Theme.font; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+
+                    Text { text: qsTr("reply_queue_num"); color: Theme.text; font.family: Theme.font }
+                    SpinBox {
+                        from: 1; to: 65535
+                        value: backend.draft["reply_queue_num"] ?? 2001
+                        onValueModified: page.setInt("reply_queue_num", value)
+                    }
+                    Text { text: qsTr("Отдельная очередь для reply; не должна совпадать с queue_num."); color: Theme.muted; font.family: Theme.font; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+
+                    Text { text: qsTr("reply_inspect_packets"); color: Theme.text; font.family: Theme.font }
+                    SpinBox {
+                        from: 1; to: 16
+                        value: backend.draft["reply_inspect_packets"] ?? 3
+                        onValueModified: page.setInt("reply_inspect_packets", value)
+                    }
+                    Text { text: qsTr("Сколько первых reply-пакетов отдавать observer'у."); color: Theme.muted; font.family: Theme.font; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
 
                     Text { text: qsTr("auto_profile"); color: Theme.text; font.family: Theme.font }
                     Switch {

@@ -90,6 +90,8 @@ SendSplitResult send_split_segments(int raw_fd, const TcpPacket& p,
 // uses a low TTL so the segment reaches an on-path DPI but not the server.
 bool send_fake_segment(int raw_fd, const TcpPacket& p, std::uint32_t seq,
                        const std::uint8_t* payload, std::size_t payload_len,
-                       std::uint8_t ttl, std::uint16_t ip_id, std::string& error);
+                       std::uint8_t ttl, std::uint16_t ip_id,
+                       bool bad_checksum, std::int32_t seq_offset, bool tcp_ts,
+                       std::string& error);
 
 } // namespace dpi

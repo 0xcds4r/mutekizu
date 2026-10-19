@@ -206,6 +206,18 @@ bool load_config(const std::string& path, Config& cfg, std::string& error)
         } else if (key == "fake_sni") {
             if (val.empty() || !valid_domain(val)) return bad("fake_sni");
             out.fake_sni = val;
+        } else if (key == "fake_bad_checksum") {
+            if (!parse_bool(val, out.fake_bad_checksum)) return bad("fake_bad_checksum");
+        } else if (key == "fake_seq_offset") {
+            std::int64_t v = 0;
+            const auto* first = val.data();
+            const auto* last = val.data() + val.size();
+            auto rc = std::from_chars(first, last, v, 10);
+            if (rc.ec != std::errc{} || rc.ptr != last || v < -32768 || v > 32767)
+                return bad("fake_seq_offset");
+            out.fake_seq_offset = static_cast<std::int16_t>(v);
+        } else if (key == "fake_timestamp") {
+            if (!parse_bool(val, out.fake_timestamp)) return bad("fake_timestamp");
         } else if (key == "seqovl_enabled") {
             if (!parse_bool(val, out.seqovl_enabled)) return bad("seqovl_enabled");
         } else if (key == "seqovl_bytes") {
@@ -222,6 +234,10 @@ bool load_config(const std::string& path, Config& cfg, std::string& error)
             std::uint64_t v = 0;
             if (!parse_u64(val, v) || v == 0 || v > 16) return bad("udp_fake_repeats");
             out.udp_fake_repeats = static_cast<std::uint16_t>(v);
+        } else if (key == "udp_fake_type") {
+            if (val != "stun" && val != "quic" && val != "discord" && val != "random")
+                return bad("udp_fake_type");
+            out.udp_fake_type = val;
         } else if (key == "seqovl_repeats") {
             std::uint64_t v = 0;
             if (!parse_u64(val, v) || v == 0 || v > 16) return bad("seqovl_repeats");
@@ -266,6 +282,16 @@ bool load_config(const std::string& path, Config& cfg, std::string& error)
             std::uint64_t v = 0;
             if (!parse_u64(val, v) || v == 0 || v > 300) return bad("auto_retry_window_s");
             out.auto_retry_window_s = static_cast<std::uint16_t>(v);
+        } else if (key == "reply_observe") {
+            if (!parse_bool(val, out.reply_observe)) return bad("reply_observe");
+        } else if (key == "reply_queue_num") {
+            std::uint64_t v = 0;
+            if (!parse_u64(val, v) || v == 0 || v > 65535) return bad("reply_queue_num");
+            out.reply_queue_num = static_cast<std::uint16_t>(v);
+        } else if (key == "reply_inspect_packets") {
+            std::uint64_t v = 0;
+            if (!parse_u64(val, v) || v == 0 || v > 16) return bad("reply_inspect_packets");
+            out.reply_inspect_packets = static_cast<std::uint32_t>(v);
         } else if (key == "log_level") {
             if (val != "error" && val != "warn" && val != "info" && val != "debug")
                 return bad("log_level");
@@ -313,6 +339,10 @@ bool load_config(const std::string& path, Config& cfg, std::string& error)
 
     if (!out.enable_ipv4 && !out.enable_ipv6) {
         error = "at least one of ipv4/ipv6 must be enabled";
+        return false;
+    }
+    if (out.reply_observe && out.reply_queue_num == out.queue_num) {
+        error = "reply_queue_num must differ from queue_num";
         return false;
     }
     if (!out.split_enabled && !out.mss_clamp) {

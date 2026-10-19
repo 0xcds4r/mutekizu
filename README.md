@@ -504,9 +504,15 @@ sudo ~/mutekizu/scripts/install-all.sh --polkit-noauth
 * `seqovl_enabled=true` — один или несколько fake-сегментов с отрицательным
   перекрытием sequence (`seqovl_bytes=646`) и fake ClientHello, чтобы
   on-path DPI собирал другой поток. Число повторов — `seqovl_repeats`.
-* `udp_fake_enabled=true` — low-TTL fake STUN на портах Discord RTC
+* `udp_fake_enabled=true` — low-TTL fake UDP на портах Discord RTC
   `19294-19344`, `50000-50100` и UDP/443. TTL — `udp_fake_ttl=4`,
-  число повторов — `udp_fake_repeats=5`.
+  число повторов — `udp_fake_repeats=5`. `udp_fake_type` задаёт `stun`,
+  `quic`, `discord` (RTP) или `random`.
+* `reply_observe=true` — отдельная input-цепочка и NFQUEUE
+  (`reply_queue_num=2001`) на первые `reply_inspect_packets` ответов сервера;
+  TLS ServerHello там — точный сигнал успеха для автоподбора профилей.
+* Fooling для fake: `fake_bad_checksum`, `fake_seq_offset`, `fake_timestamp`.
+  Меняют только low-TTL fake, реальные сегменты не трогают.
 
 Дополнительно можно включить:
 
@@ -520,9 +526,8 @@ sudo ~/mutekizu/scripts/install-all.sh --polkit-noauth
 прыжка, где успевает истечь низкий TTL, поэтому fake/seqovl/UDP fake там не
 проверяются; если сеть их не принимает, отключай опцию по отдельности.
 
-По сравнению с zapret пока нет fake QUIC, вариантов TCP MD5/TTL-фулинга и
-полноценного движка правил по hostlist. Mutekizu остаётся инструментом для
-TCP ClientHello плюс UDP fake для RTC.
+Осталось нереализованным: INET_DIAG/conntrack health, IP-фрагментация и
+eBPF/XDP fast path. TCP MD5/AO-фулинг и hostlist-движок тоже пока нет.
 
 ---
 
@@ -557,6 +562,8 @@ fake_enabled = false
 * профиль может включить домен, которого нет в `domains.txt`;
 * поддерживаются все TCP-ключи split/fake/seqovl, включая
   `split_multidisorder`, `split_data`, `split_jitter_ms`;
+* `interfaces = wlan0, wwan0` ограничивает профиль сетевым интерфейсом;
+  без этого ключа профиль подходит для любого интерфейса (SSID пока нет);
 * наследования профилей пока нет; общие значения берутся из `mutekizu.conf`;
 * изменения профилей применяются после restart службы.
 

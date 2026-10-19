@@ -147,9 +147,17 @@ std::vector<std::uint8_t> build_segment(const TcpPacket& p, std::uint32_t seq,
 
 bool send_one(int fd, const TcpPacket& p, std::uint32_t seq,
               const std::uint8_t* payload, std::size_t len, bool push,
-              std::uint16_t ip_id, std::uint8_t ttl, std::string& error)
+              std::uint16_t ip_id, std::uint8_t ttl, bool bad_checksum,
+              std::string& error)
 {
     auto pkt = build_segment(p, seq, payload, len, push, ip_id, ttl);
+    if (bad_checksum) {
+        const std::size_t ip_hdr = p.is_ipv4() ? 20 : 40;
+        if (pkt.size() >= ip_hdr + 18) {
+            pkt[ip_hdr + 16] = 0;
+            pkt[ip_hdr + 17] = 0;
+        }
+    }
     ssize_t wr = -1;
     if (p.is_ipv4()) {
         sockaddr_in dst{};
@@ -326,7 +334,7 @@ SendSplitResult send_split_segments(int raw_fd, const TcpPacket& p,
     std::uint16_t ip_id = p.ip_id;
     for (const Segment& s : segments) {
         if (!send_one(raw_fd, p, p.seq + static_cast<std::uint32_t>(s.from),
-                      p.payload + s.from, s.to - s.from, s.push, ip_id, ttl, r.error))
+                      p.payload + s.from, s.to - s.from, s.push, ip_id, ttl, false, r.error))
             return r;
         ++r.segments;
         if (p.is_ipv4()) ++ip_id;
@@ -342,11 +350,28 @@ SendSplitResult send_split_segments(int raw_fd, const TcpPacket& p,
 
 bool send_fake_segment(int raw_fd, const TcpPacket& p, std::uint32_t seq,
                        const std::uint8_t* payload, std::size_t payload_len,
-                       std::uint8_t ttl, std::uint16_t ip_id, std::string& error)
+                       std::uint8_t ttl, std::uint16_t ip_id,
+                       bool bad_checksum, std::int32_t seq_offset, bool tcp_ts,
+                       std::string& error)
 {
     if (raw_fd < 0) { error = "raw socket is not available"; return false; }
     if (payload == nullptr || payload_len == 0) { error = "empty fake payload"; return false; }
-    return send_one(raw_fd, p, seq, payload, payload_len, true, ip_id, ttl, error);
+
+    TcpPacket fp = p;
+    if (tcp_ts && static_cast<std::size_t>(fp.tcp_options_len) + 12 <=
+                    sizeof(fp.tcp_options)) {
+        std::uint8_t* o = fp.tcp_options + fp.tcp_options_len;
+        o[0] = 1; // NOP
+        o[1] = 1; // NOP
+        o[2] = 8; // TCP timestamp
+        o[3] = 10;
+        write32(o + 4, static_cast<std::uint32_t>(seq ^ (ip_id << 16)));
+        write32(o + 8, 0);
+        fp.tcp_options_len = static_cast<std::uint8_t>(fp.tcp_options_len + 12);
+    }
+    const std::uint32_t fake_seq = seq + static_cast<std::uint32_t>(seq_offset);
+    return send_one(raw_fd, fp, fake_seq, payload, payload_len, true, ip_id, ttl,
+                    bad_checksum, error);
 }
 
 namespace {

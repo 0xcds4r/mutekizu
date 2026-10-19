@@ -12,6 +12,7 @@ namespace dpi {
 struct Profile {
     std::string name;
     std::vector<std::string> domains;
+    std::vector<std::string> interfaces;
 
     std::optional<bool> split_enabled;
     std::optional<std::uint16_t> split_delta;

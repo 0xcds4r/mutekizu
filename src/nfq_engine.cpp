@@ -13,10 +13,12 @@
 #include <fstream>
 #include <thread>
 #include <random>
+#include <cstring>
 
 #include <arpa/inet.h>
 #include <linux/netfilter.h>
 #include <fcntl.h>
+#include <net/if.h>
 #include <netinet/in.h>
 #include <poll.h>
 #include <sys/socket.h>
@@ -107,6 +109,7 @@ NfqEngine::~NfqEngine()
     stopping_.store(true, std::memory_order_relaxed);
     for (int i = 0; i < 300 && probesInFlight_.load(std::memory_order_relaxed) > 0; ++i)
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    if (reply_queue_ != nullptr) nfq_destroy_queue(reply_queue_);
     if (queue_ != nullptr) nfq_destroy_queue(queue_);
     if (nfq_ != nullptr) nfq_close(nfq_);
     if (raw4_ >= 0) ::close(raw4_);
@@ -194,6 +197,9 @@ NfqEngine::StrategyValues NfqEngine::effective_for(int profile_index) const
     st.fake_ttl = cfg_.fake_ttl;
     st.fake_repeats = cfg_.fake_repeats;
     st.fake_sni = cfg_.fake_sni;
+    st.fake_bad_checksum = cfg_.fake_bad_checksum;
+    st.fake_seq_offset = cfg_.fake_seq_offset;
+    st.fake_timestamp = cfg_.fake_timestamp;
     st.seqovl_enabled = cfg_.seqovl_enabled;
     st.seqovl_bytes = cfg_.seqovl_bytes;
     st.seqovl_repeats = cfg_.seqovl_repeats;
@@ -230,11 +236,17 @@ int NfqEngine::profile_index_for(const std::string& sni) const
     return -1;
 }
 
-std::vector<int> NfqEngine::matching_profiles(const std::string& sni) const
+std::vector<int> NfqEngine::matching_profiles(const std::string& sni,
+                                              const std::string& ifname) const
 {
     std::vector<int> out;
-    for (std::size_t i = 0; i < profile_sets_.size(); ++i)
-        if (profile_sets_[i].matches(sni)) out.push_back(static_cast<int>(i));
+    for (std::size_t i = 0; i < profile_sets_.size(); ++i) {
+        if (!profile_sets_[i].matches(sni)) continue;
+        const auto& itfs = profiles_[i].interfaces;
+        if (itfs.empty() ||
+            std::find(itfs.begin(), itfs.end(), ifname) != itfs.end())
+            out.push_back(static_cast<int>(i));
+    }
     return out;
 }
 
@@ -488,7 +500,9 @@ bool NfqEngine::handle_split(nfq_q_handle* qh, std::uint32_t id, const TcpPacket
         for (std::uint16_t i = 0; i < st.fake_repeats; ++i) {
             std::string ferr;
             if (!send_fake_segment(fd, pkt, pkt.seq, fake.data(), fake.size(),
-                                   static_cast<std::uint8_t>(st.fake_ttl), ip_id, ferr)) {
+                                   static_cast<std::uint8_t>(st.fake_ttl), ip_id,
+                                   st.fake_bad_checksum, st.fake_seq_offset,
+                                   st.fake_timestamp, ferr)) {
                 log_msg(LogLevel::Debug, "fake send failed: %s", ferr.c_str());
                 break;
             }
@@ -506,7 +520,9 @@ bool NfqEngine::handle_split(nfq_q_handle* qh, std::uint32_t id, const TcpPacket
             std::string oerr;
             if (!send_fake_segment(fd, pkt, pkt.seq - st.seqovl_bytes,
                                    overlap.data(), overlap.size(),
-                                   static_cast<std::uint8_t>(st.fake_ttl), ip_id, oerr)) {
+                                   static_cast<std::uint8_t>(st.fake_ttl), ip_id,
+                                   st.fake_bad_checksum, 0,
+                                   st.fake_timestamp, oerr)) {
                 log_msg(LogLevel::Debug, "seqovl send failed: %s", oerr.c_str());
                 break;
             }
@@ -539,6 +555,54 @@ bool NfqEngine::handle_split(nfq_q_handle* qh, std::uint32_t id, const TcpPacket
     return nfq_set_verdict(qh, id, NF_DROP, 0, nullptr) == 0;
 }
 
+int NfqEngine::reply_callback(nfq_q_handle* qh, nfgenmsg* nfmsg, nfq_data* nfad,
+                              void* ctx)
+{
+    (void)nfmsg;
+    auto* self = static_cast<NfqEngine*>(ctx);
+    return self->handle_reply(qh, nfad);
+}
+
+int NfqEngine::handle_reply(nfq_q_handle* qh, nfq_data* nfad)
+{
+    ++stats_.reply_packets;
+    nfqnl_msg_packet_hdr* ph = nfq_get_msg_packet_hdr(nfad);
+    if (ph == nullptr) return -1;
+    const std::uint32_t id = ntohl(ph->packet_id);
+
+    unsigned char* data = nullptr;
+    const int len = nfq_get_payload(nfad, &data);
+    if (len <= 0 || data == nullptr) return nfq_set_verdict(qh, id, NF_ACCEPT, 0, nullptr);
+
+    TcpPacket pkt;
+    if (!parse_l3_packet(data, static_cast<std::size_t>(len), pkt))
+        return nfq_set_verdict(qh, id, NF_ACCEPT, 0, nullptr);
+
+    FlowKey key;
+    key.family = pkt.family;
+    key.sport = pkt.dport;
+    key.dport = pkt.sport;
+    std::memcpy(key.src, pkt.dst.data(), sizeof(key.src));
+    std::memcpy(key.dst, pkt.src.data(), sizeof(key.dst));
+    auto it = flows_.find(key);
+    if (it == flows_.end())
+        return nfq_set_verdict(qh, id, NF_ACCEPT, 0, nullptr);
+
+    Flow& flow = it->second;
+    // TLS ServerHello: content type 22, version 3.x, handshake type 2.
+    if (pkt.payload_len >= 6 && pkt.payload[0] == 0x16 &&
+        pkt.payload[1] == 0x03 && pkt.payload[5] == 0x02) {
+        if (!flow.success) {
+            flow.success = true;
+            mark_profile_success(flow.sni);
+            ++stats_.server_hellos;
+            log_msg(LogLevel::Debug, "server hello observed for %s",
+                    flow.sni.empty() ? "target" : flow.sni.c_str());
+        }
+    }
+    return nfq_set_verdict(qh, id, NF_ACCEPT, 0, nullptr);
+}
+
 int NfqEngine::handle(nfq_q_handle* qh, nfq_data* nfad)
 {
     ++stats_.packets;
@@ -565,17 +629,34 @@ int NfqEngine::handle(nfq_q_handle* qh, nfq_data* nfad)
             (up.dport >= 50000 && up.dport <= 50100);
         if (!voice_port) return accept(qh, id);
 
-        // Minimal STUN Binding Request. Discord RTC uses STUN on the voice
-        // ports; the fake is low-TTL so only the on-path DPI sees it.
-        std::uint8_t stun[20] = {0x00, 0x01, 0x00, 0x00, 0x21, 0x12, 0xa4, 0x42};
+        // Fake UDP payload. The low TTL keeps it away from the server; the
+        // on-path DPI still sees a plausible protocol header.
         std::random_device rd;
-        for (int i = 8; i < 20; ++i) stun[i] = static_cast<std::uint8_t>(rd());
+        std::vector<std::uint8_t> fake;
+        if (cfg_.udp_fake_type == "quic") {
+            fake = {0xc0, 0x00, 0x00, 0x00, 0x01, 0x08};
+            for (int i = 0; i < 8; ++i) fake.push_back(static_cast<std::uint8_t>(rd()));
+            fake.push_back(0x00); // SCID length
+            fake.push_back(0x00); // token length
+            fake.push_back(0x40); fake.push_back(0x20); // length varint (32)
+            fake.push_back(0x00); // packet number
+            for (int i = 0; i < 32; ++i) fake.push_back(static_cast<std::uint8_t>(rd()));
+        } else if (cfg_.udp_fake_type == "discord") {
+            fake = {0x80, 0x78, 0x00, 0x01};
+            for (int i = 0; i < 8; ++i) fake.push_back(static_cast<std::uint8_t>(rd()));
+        } else if (cfg_.udp_fake_type == "random") {
+            fake.resize(32);
+            for (auto& b : fake) b = static_cast<std::uint8_t>(rd());
+        } else {
+            fake = {0x00, 0x01, 0x00, 0x00, 0x21, 0x12, 0xa4, 0x42};
+            for (int i = 0; i < 12; ++i) fake.push_back(static_cast<std::uint8_t>(rd()));
+        }
 
         const int fd = up.is_ipv4() ? raw4_ : raw6_;
         std::uint16_t ip_id = static_cast<std::uint16_t>(up.ip_id + 0x7000);
         for (std::uint16_t i = 0; i < cfg_.udp_fake_repeats; ++i) {
             std::string uerr;
-            if (!send_fake_udp(fd, up, stun, sizeof(stun),
+            if (!send_fake_udp(fd, up, fake.data(), fake.size(),
                                static_cast<std::uint8_t>(cfg_.udp_fake_ttl), ip_id, uerr)) {
                 log_msg(LogLevel::Debug, "udp fake failed: %s", uerr.c_str());
                 break;
@@ -651,7 +732,10 @@ int NfqEngine::handle(nfq_q_handle* qh, nfq_data* nfad)
         return accept(qh, id);
     }
 
-    const std::vector<int> candidates = matching_profiles(info.sni);
+    char ifname[IF_NAMESIZE]{};
+    const std::uint32_t outdev = nfq_get_outdev(nfad);
+    if (outdev != 0) (void)if_indextoname(outdev, ifname);
+    const std::vector<int> candidates = matching_profiles(info.sni, ifname);
     const int profile_index = candidates.empty()
                                   ? -1
                                   : choose_profile(info.sni, candidates);

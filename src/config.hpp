@@ -30,12 +30,16 @@ struct Config {
     std::uint16_t fake_ttl = 3;      // fake packet TTL/hop limit
     std::uint16_t fake_repeats = 3;  // fake packets per ClientHello
     std::string fake_sni = "www.google.com"; // SNI inside the fake hello
+    bool fake_bad_checksum = false;  // corrupt TCP checksum in fake packets
+    int16_t fake_seq_offset = 0;     // shift fake TCP sequence
+    bool fake_timestamp = false;     // add a TCP timestamp option to fakes
     bool seqovl_enabled = false;     // overlapping low-TTL fake segment
     std::uint16_t seqovl_bytes = 664; // sequence overlap
     std::uint16_t seqovl_repeats = 1;
     bool udp_fake_enabled = false;  // fake STUN for Discord/RTC UDP
     std::uint16_t udp_fake_ttl = 3;
     std::uint16_t udp_fake_repeats = 3;
+    std::string udp_fake_type = "stun"; // stun, quic, discord, random
     std::uint16_t mss = 1200;        // cap for our re-segmentation
     std::uint32_t inspect_packets = 10; // nft: ct original packets 0-N
     bool split_enabled = true;   // SNI ClientHello splitter (NFQUEUE)
@@ -49,6 +53,9 @@ struct Config {
     std::string profiles_file = "/etc/mutekizu/profiles.conf";
     bool auto_profile = true;      // rotate matching profiles on failed attempts
     std::uint16_t auto_retry_window_s = 10;
+    bool reply_observe = true;       // separate NFQUEUE for server replies
+    std::uint16_t reply_queue_num = 2001;
+    std::uint32_t reply_inspect_packets = 3;
     std::string log_level = "info";
     bool log_sni = false;
 

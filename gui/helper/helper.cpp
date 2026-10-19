@@ -101,13 +101,15 @@ bool parsePayload(const QByteArray& bytes, Payload& p)
     static const QStringList allowed{
         "split_enabled", "mss_clamp", "split_delta", "split_stride", "split_max",
         "split_gap_ms", "split_disorder", "split_multidisorder", "split_jitter_ms",
-        "fake_enabled", "fake_ttl", "fake_repeats", "fake_sni", "seqovl_enabled",
+        "fake_enabled", "fake_ttl", "fake_repeats", "fake_sni", "fake_bad_checksum",
+        "fake_seq_offset", "fake_timestamp", "seqovl_enabled",
         "seqovl_bytes", "seqovl_repeats", "udp_fake_enabled", "udp_fake_ttl",
-        "udp_fake_repeats", "mss", "mss_value", "inspect_packets",
+        "udp_fake_repeats", "udp_fake_type", "mss", "mss_value", "inspect_packets",
         "queue_num", "fwmark",
         "max_queue_len", "copy_range", "ipv4", "ipv6", "ports", "log_level", "log_sni",
         "max_flows", "flow_buffer", "flow_timeout_s", "domains_file", "profiles_file", "mss_targets_file",
-        "auto_discover", "auto_domains_file", "auto_profile", "auto_retry_window_s"};
+        "auto_discover", "auto_domains_file", "auto_profile", "auto_retry_window_s",
+        "reply_observe", "reply_queue_num", "reply_inspect_packets"};
     for (auto it = p.settings.begin(); it != p.settings.end(); ++it) {
         if (!allowed.contains(it.key()))
             return fail(QStringLiteral("unknown setting: %1").arg(it.key()));
@@ -120,9 +122,10 @@ bool parsePayload(const QByteArray& bytes, Payload& p)
         return true;
     };
     bool split = false, mss = false, v4 = false, v6 = false, logSni = false;
-    bool autoDiscover = true, autoProfile = true;
+    bool autoDiscover = true, autoProfile = true, replyObserve = true;
     bool splitDisorder = false, splitMultidisorder = false;
     bool fakeEnabled = false, seqovlEnabled = false, udpFakeEnabled = false;
+    bool fakeBadChecksum = false, fakeTimestamp = false;
     if (!requireBool("split_enabled", split) || !requireBool("mss_clamp", mss) ||
         !requireBool("ipv4", v4) || !requireBool("ipv6", v6) ||
         !requireBool("log_sni", logSni))
@@ -132,6 +135,9 @@ bool parsePayload(const QByteArray& bytes, Payload& p)
         return false;
     if (p.settings.contains("auto_profile") &&
         !requireBool("auto_profile", autoProfile))
+        return false;
+    if (p.settings.contains("reply_observe") &&
+        !requireBool("reply_observe", replyObserve))
         return false;
     if (p.settings.contains("split_disorder") &&
         !requireBool("split_disorder", splitDisorder))
@@ -148,13 +154,21 @@ bool parsePayload(const QByteArray& bytes, Payload& p)
     if (p.settings.contains("fake_enabled") &&
         !requireBool("fake_enabled", fakeEnabled))
         return false;
+    if (p.settings.contains("fake_bad_checksum") &&
+        !requireBool("fake_bad_checksum", fakeBadChecksum))
+        return false;
+    if (p.settings.contains("fake_timestamp") &&
+        !requireBool("fake_timestamp", fakeTimestamp))
+        return false;
     if (!v4 && !v6) return fail(QStringLiteral("at least one of ipv4/ipv6 must be enabled"));
     if (!split && !mss) return fail(QStringLiteral("at least one mode must be enabled"));
 
     int delta = 0, stride = 0, maxs = 0, gap = 0, chunk = 0, mssValue = 0, inspect = 0;
     int queue = 0, maxq = 0, copy = 0, maxFlows = 0, buf = 0, timeout = 0;
     int fakeTtl = 0, fakeRepeats = 0, splitJitter = 0, seqovlBytes = 0, seqovlRepeats = 0;
+    int fakeSeqOffset = 0;
     int udpFakeTtl = 0, udpFakeRepeats = 0, autoRetryWindow = 0;
+    int replyQueue = 0, replyInspect = 0;
     if (!isInt(p.settings.value("split_delta"), 1, 200, delta) ||
         !isInt(p.settings.value("split_stride"), 0, 64, stride) ||
         !isInt(p.settings.value("split_max"), 1, 128, maxs) ||
@@ -178,6 +192,14 @@ bool parsePayload(const QByteArray& bytes, Payload& p)
     udpFakeTtl = 4;
     udpFakeRepeats = 5;
     autoRetryWindow = 10;
+    replyQueue = 2001;
+    replyInspect = 3;
+    if (p.settings.contains("reply_queue_num") &&
+        !isInt(p.settings.value("reply_queue_num"), 1, 65535, replyQueue))
+        return fail(QStringLiteral("invalid reply_queue_num"));
+    if (p.settings.contains("reply_inspect_packets") &&
+        !isInt(p.settings.value("reply_inspect_packets"), 1, 16, replyInspect))
+        return fail(QStringLiteral("invalid reply_inspect_packets"));
     if (p.settings.contains("auto_retry_window_s") &&
         !isInt(p.settings.value("auto_retry_window_s"), 1, 300, autoRetryWindow))
         return fail(QStringLiteral("invalid auto_retry_window_s"));
@@ -202,6 +224,16 @@ bool parsePayload(const QByteArray& bytes, Payload& p)
     if (p.settings.contains("fake_repeats") &&
         !isInt(p.settings.value("fake_repeats"), 1, 16, fakeRepeats))
         return fail(QStringLiteral("invalid fake_repeats"));
+    if (p.settings.contains("fake_seq_offset") &&
+        !isInt(p.settings.value("fake_seq_offset"), -32768, 32767, fakeSeqOffset))
+        return fail(QStringLiteral("invalid fake_seq_offset"));
+    const QString udpFakeType = (p.settings.contains("udp_fake_type")
+                                     ? p.settings.value("udp_fake_type").toString()
+                                     : QStringLiteral("stun"));
+    if (udpFakeType != "stun" && udpFakeType != "quic" &&
+        udpFakeType != "discord" && udpFakeType != "random")
+        return fail(QStringLiteral("invalid udp_fake_type"));
+
     const QString fakeSni = (p.settings.contains("fake_sni")
                                  ? p.settings.value("fake_sni").toString()
                                  : QStringLiteral("www.microsoft.com")).trimmed();
@@ -278,12 +310,16 @@ QString configText(const Payload& p)
     add("fake_repeats", QString::number(s.value("fake_repeats").toInt(3)));
     add("fake_sni", s.contains("fake_sni") ? s.value("fake_sni").toString()
                                            : QStringLiteral("www.microsoft.com"));
+    add("fake_bad_checksum", b(s.value("fake_bad_checksum").toBool(false)));
+    add("fake_seq_offset", QString::number(s.value("fake_seq_offset").toInt(0)));
+    add("fake_timestamp", b(s.value("fake_timestamp").toBool(false)));
     add("seqovl_enabled", b(s.value("seqovl_enabled").toBool(true)));
     add("seqovl_bytes", QString::number(s.value("seqovl_bytes").toInt(646)));
     add("seqovl_repeats", QString::number(s.value("seqovl_repeats").toInt(1)));
     add("udp_fake_enabled", b(s.value("udp_fake_enabled").toBool(true)));
     add("udp_fake_ttl", QString::number(s.value("udp_fake_ttl").toInt(4)));
     add("udp_fake_repeats", QString::number(s.value("udp_fake_repeats").toInt(5)));
+    add("udp_fake_type", s.value("udp_fake_type").toString(QStringLiteral("stun")));
     add("mss", QString::number(s.value("mss").toInt()));
     add("mss_value", QString::number(s.value("mss_value").toInt()));
     add("inspect_packets", QString::number(s.value("inspect_packets").toInt()));
@@ -305,6 +341,9 @@ QString configText(const Payload& p)
     add("auto_discover", b(s.value("auto_discover").toBool(true)));
     add("auto_profile", b(s.value("auto_profile").toBool(true)));
     add("auto_retry_window_s", QString::number(s.value("auto_retry_window_s").toInt(10)));
+    add("reply_observe", b(s.value("reply_observe").toBool(true)));
+    add("reply_queue_num", QString::number(s.value("reply_queue_num").toInt(2001)));
+    add("reply_inspect_packets", QString::number(s.value("reply_inspect_packets").toInt(3)));
     add("auto_domains_file", QStringLiteral("/var/lib/mutekizu/auto-domains.txt"));
     return out;
 }

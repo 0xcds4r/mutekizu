@@ -88,12 +88,16 @@ QVariantMap Backend::defaults()
     m["fake_ttl"] = 3;
     m["fake_repeats"] = 3;
     m["fake_sni"] = QStringLiteral("www.microsoft.com");
+    m["fake_bad_checksum"] = false;
+    m["fake_seq_offset"] = 0;
+    m["fake_timestamp"] = false;
     m["seqovl_enabled"] = true;
     m["seqovl_bytes"] = 646;
     m["seqovl_repeats"] = 1;
     m["udp_fake_enabled"] = true;
     m["udp_fake_ttl"] = 4;
     m["udp_fake_repeats"] = 5;
+    m["udp_fake_type"] = QStringLiteral("stun");
     m["mss"] = 1200;
     m["mss_value"] = 96;
     m["inspect_packets"] = 10;
@@ -112,6 +116,9 @@ QVariantMap Backend::defaults()
     m["auto_discover"] = true;
     m["auto_profile"] = true;
     m["auto_retry_window_s"] = 10;
+    m["reply_observe"] = true;
+    m["reply_queue_num"] = 2001;
+    m["reply_inspect_packets"] = 3;
     return m;
 }
 
@@ -618,12 +625,16 @@ QString Backend::settingsToConfig(const QVariantMap& s, const QString& domainsPa
     add("fake_ttl", QString::number(s.value("fake_ttl").toInt()));
     add("fake_repeats", QString::number(s.value("fake_repeats").toInt()));
     add("fake_sni", s.value("fake_sni").toString());
+    add("fake_bad_checksum", b(s.value("fake_bad_checksum")));
+    add("fake_seq_offset", QString::number(s.value("fake_seq_offset").toInt()));
+    add("fake_timestamp", b(s.value("fake_timestamp")));
     add("seqovl_enabled", b(s.value("seqovl_enabled")));
     add("seqovl_bytes", QString::number(s.value("seqovl_bytes").toInt()));
     add("seqovl_repeats", QString::number(s.value("seqovl_repeats").toInt()));
     add("udp_fake_enabled", b(s.value("udp_fake_enabled")));
     add("udp_fake_ttl", QString::number(s.value("udp_fake_ttl").toInt()));
     add("udp_fake_repeats", QString::number(s.value("udp_fake_repeats").toInt()));
+    add("udp_fake_type", s.value("udp_fake_type").toString());
     add("mss", QString::number(s.value("mss").toInt()));
     add("mss_value", QString::number(s.value("mss_value").toInt()));
     add("inspect_packets", QString::number(s.value("inspect_packets").toInt()));
@@ -645,6 +656,9 @@ QString Backend::settingsToConfig(const QVariantMap& s, const QString& domainsPa
     add("auto_discover", b(s.value("auto_discover")));
     add("auto_profile", b(s.value("auto_profile")));
     add("auto_retry_window_s", QString::number(s.value("auto_retry_window_s").toInt()));
+    add("reply_observe", b(s.value("reply_observe")));
+    add("reply_queue_num", QString::number(s.value("reply_queue_num").toInt()));
+    add("reply_inspect_packets", QString::number(s.value("reply_inspect_packets").toInt()));
     add("auto_domains_file", QStringLiteral("/var/lib/mutekizu/auto-domains.txt"));
     return out;
 }
