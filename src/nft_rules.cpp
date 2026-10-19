@@ -200,12 +200,12 @@ std::string render_ruleset(const Config& cfg, const AddressSet& mss_targets)
         if (cfg.enable_ipv4 && !ipfrag.v4.empty())
             os << "ip daddr @ipfrag4 tcp dport { " << ports.str()
                << " } ct original packets 0-" << cfg.ip_frag_inspect_packets
-               << " queue num " << cfg.ip_frag_queue_num << " bypass"
+               << " counter queue num " << cfg.ip_frag_queue_num << " bypass"
                << " comment \"" << kQueueComment << "-ipfrag\"\n";
         if (cfg.enable_ipv6 && !ipfrag.v6.empty())
             os << "    ip6 daddr @ipfrag6 tcp dport { " << ports.str()
                << " } ct original packets 0-" << cfg.ip_frag_inspect_packets
-               << " queue num " << cfg.ip_frag_queue_num << " bypass"
+               << " counter queue num " << cfg.ip_frag_queue_num << " bypass"
                << " comment \"" << kQueueComment << "-ipfrag6\"\n";
         os << "  }\n";
     }

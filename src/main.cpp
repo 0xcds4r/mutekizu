@@ -216,11 +216,12 @@ int cmd_run(const dpi::Config& cfg, const dpi::DomainSet& domains,
     ::sigaction(SIGINT, &sa, nullptr);
 
     dpi::log_msg(dpi::LogLevel::Info,
-                 "running: split=%s queue=%u mark=0x%x mss=%s value=%u domains=%zu targets=%zu",
+                 "running: split=%s queue=%u mark=0x%x mss=%s value=%u domains=%zu targets=%zu ipfrag=%s",
                  cfg.split_enabled ? "on" : "off", static_cast<unsigned>(cfg.queue_num),
                  cfg.fwmark, cfg.mss_clamp ? "on" : "off",
                  static_cast<unsigned>(cfg.mss_value), domains.domains.size(),
-                 mss_targets.v4.size() + mss_targets.v6.size());
+                 mss_targets.v4.size() + mss_targets.v6.size(),
+                 cfg.ip_frag_enabled ? "on" : "off");
 
     int rc = 0;
     if (engine) {
@@ -239,12 +240,15 @@ int cmd_run(const dpi::Config& cfg, const dpi::DomainSet& domains,
     if (engine) {
         const auto& s = engine->stats();
         dpi::log_msg(dpi::LogLevel::Info,
-                     "stopped: packets=%llu splits=%llu accepted=%llu parse_errors=%llu send_errors=%llu",
+                     "stopped: packets=%llu splits=%llu accepted=%llu parse_errors=%llu send_errors=%llu "
+                     "ipfrag_packets=%llu ipfrag_fragments=%llu",
                      static_cast<unsigned long long>(s.packets),
                      static_cast<unsigned long long>(s.splits),
                      static_cast<unsigned long long>(s.accepted_unmodified),
                      static_cast<unsigned long long>(s.parse_errors),
-                     static_cast<unsigned long long>(s.split_send_errors));
+                     static_cast<unsigned long long>(s.split_send_errors),
+                     static_cast<unsigned long long>(s.ipfrag_packets),
+                     static_cast<unsigned long long>(s.ipfrag_fragments));
     } else {
         dpi::log_msg(dpi::LogLevel::Info, "stopped");
     }

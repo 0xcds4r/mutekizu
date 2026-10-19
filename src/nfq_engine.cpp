@@ -626,6 +626,11 @@ int NfqEngine::handle_ipfrag(nfq_q_handle* qh, nfq_data* nfad)
     if (!parse_l3_packet(data, static_cast<std::size_t>(len), pkt))
         return nfq_set_verdict(qh, id, NF_ACCEPT, 0, nullptr);
 
+    // Do not fragment the SYN/ACK handshake itself: some middleboxes drop
+    // fragmented control packets. Fragment only payload-bearing data.
+    if ((pkt.flags & (0x02 | 0x01 | 0x04)) != 0 || pkt.payload_len == 0)
+        return nfq_set_verdict(qh, id, NF_ACCEPT, 0, nullptr);
+
     ++stats_.ipfrag_packets;
     const FragmentResult fr = fragment_l3_packet(raw4_, raw6_, data,
                                                   static_cast<std::size_t>(len),
