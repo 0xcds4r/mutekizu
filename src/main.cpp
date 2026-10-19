@@ -1,5 +1,6 @@
 #include "config.hpp"
 #include "doctor.hpp"
+#include "profiles.hpp"
 #include "log.hpp"
 #include "nfq_engine.hpp"
 #include "nft_rules.hpp"
@@ -313,6 +314,11 @@ int main(int argc, char** argv)
 
     dpi::Config cfg;
     if (!dpi::load_config(opt.config, cfg, err)) {
+        std::fprintf(stderr, "error: %s\n", err.c_str());
+        return 2;
+    }
+    std::vector<dpi::Profile> profiles;
+    if (!dpi::load_profiles(cfg.profiles_file, profiles, err)) {
         std::fprintf(stderr, "error: %s\n", err.c_str());
         return 2;
     }

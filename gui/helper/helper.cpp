@@ -30,6 +30,7 @@ constexpr const char* kDir = "/etc/mutekizu";
 constexpr const char* kConfig = "mutekizu.conf";
 constexpr const char* kDomains = "domains.txt";
 constexpr const char* kTargets = "mss_targets.txt";
+constexpr const char* kProfiles = "profiles.conf";
 constexpr std::size_t kMaxInput = 64 * 1024;
 
 std::string err;
@@ -81,6 +82,8 @@ struct Payload {
     QJsonObject settings;
     QStringList domains;
     QStringList targets;
+    QString profiles;
+    bool hasProfiles = false;
 };
 
 bool parsePayload(const QByteArray& bytes, Payload& p)
@@ -98,6 +101,14 @@ bool parsePayload(const QByteArray& bytes, Payload& p)
         return fail(QStringLiteral("domains and mss_targets must be arrays"));
 
     p.settings = root.value("settings").toObject();
+    if (root.contains("profiles")) {
+        if (!root.value("profiles").isString())
+            return fail(QStringLiteral("profiles must be a string"));
+        p.profiles = root.value("profiles").toString();
+        if (p.profiles.size() > 262144)
+            return fail(QStringLiteral("profiles file is too large"));
+        p.hasProfiles = true;
+    }
     static const QStringList allowed{
         "split_enabled", "mss_clamp", "split_delta", "split_stride", "split_max",
         "split_gap_ms", "split_disorder", "split_multidisorder", "split_jitter_ms",
@@ -417,19 +428,24 @@ bool writeFiles(const Payload& p)
             return fail(QStringLiteral("refusing symlink: %1").arg(name));
         return true;
     };
-    if (!noSymlink(kConfig) || !noSymlink(kDomains) || !noSymlink(kTargets)) { ::close(dirfd); return false; }
+    if (!noSymlink(kConfig) || !noSymlink(kDomains) || !noSymlink(kTargets) ||
+        !noSymlink(kProfiles)) { ::close(dirfd); return false; }
 
     QByteArray domains;
     for (const QString& d : p.domains) domains += d.toUtf8() + '\n';
     QByteArray targets;
     for (const QString& a : p.targets) targets += a.toUtf8() + '\n';
 
-    const char* names[] = {kConfig, kDomains, kTargets};
-    const QByteArray payloads[] = {configText(p).toUtf8(), domains, targets};
-    for (int i = 0; i < 3; ++i) {
+    std::vector<const char*> names{kConfig, kDomains, kTargets};
+    std::vector<QByteArray> payloads{configText(p).toUtf8(), domains, targets};
+    if (p.hasProfiles) {
+        names.push_back(kProfiles);
+        payloads.push_back(p.profiles.toUtf8());
+    }
+    for (std::size_t i = 0; i < names.size(); ++i) {
         if (!writeAll(dirfd, names[i], payloads[i], true)) {
             const std::string saved = err;
-            rollbackWritten(dirfd, names, i);
+            rollbackWritten(dirfd, names.data(), static_cast<int>(i));
             ::close(dirfd);
             err = saved;
             return false;

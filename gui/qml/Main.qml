@@ -17,12 +17,12 @@ ApplicationWindow {
 
     property int pageIndex: 0
     property var pageTitles: [
-        qsTr("Обзор"), qsTr("Домены"), qsTr("Настройки"),
+        qsTr("Обзор"), qsTr("Домены"), qsTr("Профили"), qsTr("Настройки"),
         qsTr("Диагностика"), qsTr("Журнал"), qsTr("О программе")
     ]
 
     function pageFromName(name) {
-        var keys = ["overview", "domains", "settings", "diagnostics", "logs", "about"]
+        var keys = ["overview", "domains", "profiles", "settings", "diagnostics", "logs", "about"]
         var i = keys.indexOf(name)
         return i >= 0 ? i : 0
     }
@@ -46,6 +46,7 @@ ApplicationWindow {
     Shortcut { sequence: "Alt+4"; onActivated: root.pageIndex = 3 }
     Shortcut { sequence: "Alt+5"; onActivated: root.pageIndex = 4 }
     Shortcut { sequence: "Alt+6"; onActivated: root.pageIndex = 5 }
+    Shortcut { sequence: "Alt+7"; onActivated: root.pageIndex = 6 }
 
     header: Rectangle {
         color: Theme.surface
@@ -152,7 +153,7 @@ ApplicationWindow {
                         model: root.pageTitles
                         NavButton {
                             Layout.fillWidth: true
-                            text: (["◉ ", "⌁ ", "⚙ ", "✓ ", "☰ ", "ⓘ "][index]) + modelData
+                            text: (["◉ ", "⌁ ", "▤ ", "⚙ ", "✓ ", "☰ ", "ⓘ "][index]) + modelData
                             checked: root.pageIndex === index
                             onClicked: root.pageIndex = index
                         }
@@ -175,6 +176,7 @@ ApplicationWindow {
 
                 OverviewPage { onNavigate: root.pageIndex = pageIndex }
                 DomainsPage { }
+                ProfilesPage { }
                 SettingsPage { }
                 DiagnosticsPage { }
                 LogsPage { }

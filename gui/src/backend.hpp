@@ -38,6 +38,8 @@ class Backend : public QObject {
     Q_PROPERTY(QStringList draftDomains READ draftDomains NOTIFY draftChanged)
     Q_PROPERTY(QStringList mssTargets READ mssTargets NOTIFY draftChanged)
     Q_PROPERTY(QStringList draftMssTargets READ draftMssTargets NOTIFY draftChanged)
+    Q_PROPERTY(QString profilesText READ profilesText NOTIFY draftChanged)
+    Q_PROPERTY(QString draftProfilesText READ draftProfilesText NOTIFY draftChanged)
     Q_PROPERTY(QString activeModes READ activeModes NOTIFY draftChanged)
     Q_PROPERTY(QString lastError READ lastError NOTIFY errorChanged)
     Q_PROPERTY(QString lastErrorHint READ lastErrorHint NOTIFY errorChanged)
@@ -72,6 +74,8 @@ public:
     QStringList draftDomains() const { return m_draftDomains; }
     QStringList mssTargets() const { return m_mssTargets; }
     QStringList draftMssTargets() const { return m_draftMssTargets; }
+    QString profilesText() const { return m_profilesText; }
+    QString draftProfilesText() const { return m_draftProfilesText; }
     QString activeModes() const;
     QString lastError() const { return m_lastError; }
     QString lastErrorHint() const { return m_lastErrorHint; }
@@ -93,6 +97,8 @@ public:
     Q_INVOKABLE void setSetting(const QString& key, const QVariant& value);
     Q_INVOKABLE void setDomains(const QStringList& domains);
     Q_INVOKABLE void setMssTargets(const QStringList& targets);
+    Q_INVOKABLE void setProfilesText(const QString& text);
+    Q_INVOKABLE QString profileTemplate(const QString& kind) const;
     Q_INVOKABLE void addDomain(const QString& domain);
     Q_INVOKABLE void addMssTarget(const QString& target);
     Q_INVOKABLE void revertDraft();
@@ -176,6 +182,8 @@ private:
     QStringList m_draftDomains;
     QStringList m_mssTargets;
     QStringList m_draftMssTargets;
+    QString m_profilesText;
+    QString m_draftProfilesText;
     QVariantList m_diagnostics;
     QVariantList m_logs;
     QHash<QString, QString> m_hashes;
@@ -187,6 +195,7 @@ private:
     QString m_configPath;
     QString m_domainsPath;
     QString m_targetsPath;
+    QString m_profilesPath;
     QString m_connectedPath;
     std::unique_ptr<QTemporaryDir> m_doctorTemp;
 };

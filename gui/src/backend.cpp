@@ -40,6 +40,7 @@ Backend::Backend(bool demo, QObject* parent) : QObject(parent), m_demo(demo)
     m_configPath = QString::fromLatin1(kConfigDir) + "/mutekizu.conf";
     m_domainsPath = QString::fromLatin1(kConfigDir) + "/domains.txt";
     m_targetsPath = QString::fromLatin1(kConfigDir) + "/mss_targets.txt";
+    m_profilesPath = QString::fromLatin1(kConfigDir) + "/profiles.conf";
 
     if (m_demo) {
         loadDemo();
@@ -132,6 +133,8 @@ void Backend::loadDemo()
     m_draftDomains = m_domains;
     m_mssTargets = {};
     m_draftMssTargets = m_mssTargets;
+    m_profilesText = profileTemplate(QStringLiteral("discord"));
+    m_draftProfilesText = m_profilesText;
     m_configAvailable = true;
     m_diagnostics = {
         QVariantMap{{"level", "ok"}, {"text", "Демо-среда: ядро, nftables и модули доступны"}},
@@ -159,10 +162,13 @@ void Backend::loadReal()
     m_draftDomains.clear();
     m_mssTargets.clear();
     m_draftMssTargets.clear();
+    m_profilesText.clear();
+    m_draftProfilesText.clear();
     loadFiles();
     m_draft = m_settings;
     m_draftDomains = m_domains;
     m_draftMssTargets = m_mssTargets;
+    m_draftProfilesText = m_profilesText;
     m_dirty = false;
     m_conflict = false;
     rememberHashes();
@@ -214,6 +220,9 @@ void Backend::loadFiles()
     m_settings = loaded;
     m_domains = readList(m_domainsPath);
     m_mssTargets = readList(m_targetsPath);
+    QFile pf(m_profilesPath);
+    m_profilesText = pf.open(QIODevice::ReadOnly | QIODevice::Text)
+                         ? QString::fromUtf8(pf.readAll()) : QString();
 }
 
 
@@ -284,7 +293,8 @@ void Backend::clearError()
 void Backend::recomputeDirty()
 {
     const bool d = m_draft != m_settings || m_draftDomains != m_domains ||
-                   m_draftMssTargets != m_mssTargets;
+                   m_draftMssTargets != m_mssTargets ||
+                   m_draftProfilesText != m_profilesText;
     if (d != m_dirty) {
         m_dirty = d;
         emit dirtyChanged();
@@ -314,6 +324,41 @@ void Backend::setMssTargets(const QStringList& targets)
     recomputeDirty();
 }
 
+void Backend::setProfilesText(const QString& text)
+{
+    m_draftProfilesText = text;
+    recomputeDirty();
+}
+
+QString Backend::profileTemplate(const QString& kind) const
+{
+    if (kind == QStringLiteral("youtube")) {
+        return QStringLiteral(
+            "# Профиль YouTube: только split, без fake/seqovl.\n"
+            "[youtube]\n"
+            "domains = youtube.com, googlevideo.com, ytimg.com, youtubei.googleapis.com\n"
+            "split_delta = 4\n"
+            "split_stride = 4\n"
+            "split_disorder = false\n"
+            "fake_enabled = false\n"
+            "seqovl_enabled = false\n");
+    }
+    return QStringLiteral(
+        "# Discord: агрессивный TCP + UDP STUN для RTC.\n"
+        "[discord-safe]\n"
+        "domains = discord.com, discord.gg, gateway.discord.gg\n"
+        "split_disorder = true\n"
+        "fake_enabled = false\n"
+        "seqovl_enabled = false\n\n"
+        "[discord-aggressive]\n"
+        "domains = discord.com, discord.gg, gateway.discord.gg\n"
+        "split_disorder = true\n"
+        "fake_enabled = true\n"
+        "fake_sni = www.microsoft.com\n"
+        "seqovl_enabled = true\n"
+        "seqovl_bytes = 646\n");
+}
+
 void Backend::addDomain(const QString& domain)
 {
     const QString d = domain.trimmed();
@@ -337,6 +382,7 @@ void Backend::revertDraft()
     m_draft = m_settings;
     m_draftDomains = m_domains;
     m_draftMssTargets = m_mssTargets;
+    m_draftProfilesText = m_profilesText;
     m_conflict = false;
     emit conflictChanged();
     recomputeDirty();
@@ -350,6 +396,7 @@ void Backend::reloadFromDisk()
         m_draft = m_settings;
         m_draftDomains = m_domains;
         m_draftMssTargets = m_mssTargets;
+        m_draftProfilesText = m_profilesText;
         rememberHashes();
     }
     m_conflict = false;
@@ -370,7 +417,7 @@ QString Backend::fileHash(const QString& path) const
 void Backend::rememberHashes()
 {
     m_hashes.clear();
-    for (const QString& p : {m_configPath, m_domainsPath, m_targetsPath})
+    for (const QString& p : {m_configPath, m_domainsPath, m_targetsPath, m_profilesPath})
         m_hashes[p] = fileHash(p);
 }
 
@@ -768,14 +815,17 @@ QString Backend::validateDraft()
     const QString conf = dir.filePath("mutekizu.conf");
     const QString dom = dir.filePath("domains.txt");
     const QString tgt = dir.filePath("mss_targets.txt");
+    const QString prof = dir.filePath("profiles.conf");
     auto write = [](const QString& path, const QString& text) {
         QFile f(path);
         return f.open(QIODevice::WriteOnly | QIODevice::Truncate) &&
                f.write(text.toUtf8()) == text.toUtf8().size();
     };
-    if (!write(conf, settingsToConfig(m_draft, dom, tgt)) ||
+    if (!write(conf, settingsToConfig(m_draft, dom, tgt) +
+                        QStringLiteral("\nprofiles_file=%1\n").arg(prof)) ||
         !write(dom, domainsToText(m_draftDomains)) ||
-        !write(tgt, targetsToText(m_draftMssTargets)))
+        !write(tgt, targetsToText(m_draftMssTargets)) ||
+        !write(prof, m_draftProfilesText))
         return tr("Не удалось записать временную конфигурацию.");
 
     QProcess p;
@@ -807,6 +857,8 @@ QString Backend::diffText()
         if (!m_mssTargets.contains(a)) lines << "+ MSS IP " + a;
     for (const QString& a : m_mssTargets)
         if (!m_draftMssTargets.contains(a)) lines << "- MSS IP " + a;
+    if (m_draftProfilesText != m_profilesText)
+        lines << tr("profiles.conf изменён");
     return lines.isEmpty() ? tr("Изменений нет.") : lines.join('\n');
 }
 
@@ -820,6 +872,7 @@ QString Backend::helperJson() const
     root["settings"] = QJsonObject::fromVariantMap(s);
     root["domains"] = QJsonArray::fromStringList(m_draftDomains);
     root["mss_targets"] = QJsonArray::fromStringList(m_draftMssTargets);
+    root["profiles"] = m_draftProfilesText;
     return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
 }
 
@@ -842,6 +895,7 @@ void Backend::applyDraft()
         m_settings = m_draft;
         m_domains = m_draftDomains;
         m_mssTargets = m_draftMssTargets;
+        m_profilesText = m_draftProfilesText;
         m_dirty = false;
         emit dirtyChanged();
         emit configChanged();
@@ -895,6 +949,7 @@ void Backend::applyDraft()
         m_draft = m_settings;
         m_draftDomains = m_domains;
         m_draftMssTargets = m_mssTargets;
+        m_draftProfilesText = m_profilesText;
         rememberHashes();
         m_dirty = false;
         m_conflict = false;

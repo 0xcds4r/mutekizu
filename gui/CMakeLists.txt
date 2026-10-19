@@ -25,6 +25,7 @@ qt_add_qml_module(mutekizu-gui
         qml/StatusBadge.qml
         qml/OverviewPage.qml
         qml/DomainsPage.qml
+        qml/ProfilesPage.qml
         qml/SettingsPage.qml
         qml/DiagnosticsPage.qml
         qml/LogsPage.qml
