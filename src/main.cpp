@@ -331,7 +331,18 @@ int main(int argc, char** argv)
     if (opt.verbose && dpi::log_level() < dpi::LogLevel::Debug)
         dpi::set_log_level(dpi::LogLevel::Debug);
 
+    dpi::IpFragTargets ipfrag_targets;
+    if (cfg.ip_frag_enabled &&
+        !dpi::load_ipfrag_targets(cfg.ip_frag_targets_file, ipfrag_targets, err)) {
+        std::fprintf(stderr, "error: %s\n", err.c_str());
+        return 2;
+    }
+
     dpi::AddressSet mss_targets;
+    if (cfg.ip_frag_enabled && ipfrag_targets.empty()) {
+        std::fprintf(stderr, "error: IP fragmentation targets are empty\n");
+        return 2;
+    }
     if (cfg.mss_clamp && !dpi::load_mss_targets(cfg.mss_targets_file, mss_targets, err)) {
         std::fprintf(stderr, "error: %s\n", err.c_str());
         return 2;

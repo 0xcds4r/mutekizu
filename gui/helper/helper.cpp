@@ -120,7 +120,9 @@ bool parsePayload(const QByteArray& bytes, Payload& p)
         "max_queue_len", "copy_range", "ipv4", "ipv6", "ports", "log_level", "log_sni",
         "max_flows", "flow_buffer", "flow_timeout_s", "domains_file", "profiles_file", "mss_targets_file",
         "auto_discover", "auto_domains_file", "auto_profile", "auto_retry_window_s",
-        "reply_observe", "reply_queue_num", "reply_inspect_packets"};
+        "reply_observe", "reply_queue_num", "reply_inspect_packets",
+        "ip_frag_enabled", "ip_frag_queue_num", "ip_frag_size",
+        "ip_frag_inspect_packets", "ip_frag_targets_file", "ip_frag_ports"};
     for (auto it = p.settings.begin(); it != p.settings.end(); ++it) {
         if (!allowed.contains(it.key()))
             return fail(QStringLiteral("unknown setting: %1").arg(it.key()));
@@ -134,6 +136,7 @@ bool parsePayload(const QByteArray& bytes, Payload& p)
     };
     bool split = false, mss = false, v4 = false, v6 = false, logSni = false;
     bool autoDiscover = true, autoProfile = true, replyObserve = true;
+    bool ipFragEnabled = false;
     bool splitDisorder = false, splitMultidisorder = false;
     bool fakeEnabled = false, seqovlEnabled = false, udpFakeEnabled = false;
     bool fakeBadChecksum = false, fakeTimestamp = false;
@@ -149,6 +152,9 @@ bool parsePayload(const QByteArray& bytes, Payload& p)
         return false;
     if (p.settings.contains("reply_observe") &&
         !requireBool("reply_observe", replyObserve))
+        return false;
+    if (p.settings.contains("ip_frag_enabled") &&
+        !requireBool("ip_frag_enabled", ipFragEnabled))
         return false;
     if (p.settings.contains("split_disorder") &&
         !requireBool("split_disorder", splitDisorder))
@@ -179,7 +185,7 @@ bool parsePayload(const QByteArray& bytes, Payload& p)
     int fakeTtl = 0, fakeRepeats = 0, splitJitter = 0, seqovlBytes = 0, seqovlRepeats = 0;
     int fakeSeqOffset = 0;
     int udpFakeTtl = 0, udpFakeRepeats = 0, autoRetryWindow = 0;
-    int replyQueue = 0, replyInspect = 0;
+    int replyQueue = 0, replyInspect = 0, ipFragQueue = 0, ipFragSize = 0, ipFragInspect = 0;
     if (!isInt(p.settings.value("split_delta"), 1, 200, delta) ||
         !isInt(p.settings.value("split_stride"), 0, 64, stride) ||
         !isInt(p.settings.value("split_max"), 1, 128, maxs) ||
@@ -205,6 +211,18 @@ bool parsePayload(const QByteArray& bytes, Payload& p)
     autoRetryWindow = 10;
     replyQueue = 2001;
     replyInspect = 3;
+    ipFragQueue = 2002;
+    ipFragSize = 512;
+    ipFragInspect = 10;
+    if (p.settings.contains("ip_frag_queue_num") &&
+        !isInt(p.settings.value("ip_frag_queue_num"), 1, 65535, ipFragQueue))
+        return fail(QStringLiteral("invalid ip_frag_queue_num"));
+    if (p.settings.contains("ip_frag_size") &&
+        !isInt(p.settings.value("ip_frag_size"), 128, 9000, ipFragSize))
+        return fail(QStringLiteral("invalid ip_frag_size"));
+    if (p.settings.contains("ip_frag_inspect_packets") &&
+        !isInt(p.settings.value("ip_frag_inspect_packets"), 1, 64, ipFragInspect))
+        return fail(QStringLiteral("invalid ip_frag_inspect_packets"));
     if (p.settings.contains("reply_queue_num") &&
         !isInt(p.settings.value("reply_queue_num"), 1, 65535, replyQueue))
         return fail(QStringLiteral("invalid reply_queue_num"));
@@ -296,6 +314,7 @@ bool parsePayload(const QByteArray& bytes, Payload& p)
     // The helper owns the paths; any supplied path is ignored.
     p.settings["domains_file"] = QStringLiteral("/etc/mutekizu/domains.txt");
     p.settings["profiles_file"] = QStringLiteral("/etc/mutekizu/profiles.conf");
+    p.settings["ip_frag_targets_file"] = QStringLiteral("/etc/mutekizu/ip_frag_targets.txt");
     p.settings["mss_targets_file"] = QStringLiteral("/etc/mutekizu/mss_targets.txt");
     p.settings["auto_domains_file"] = QStringLiteral("/var/lib/mutekizu/auto-domains.txt");
     return true;
@@ -355,6 +374,12 @@ QString configText(const Payload& p)
     add("reply_observe", b(s.value("reply_observe").toBool(true)));
     add("reply_queue_num", QString::number(s.value("reply_queue_num").toInt(2001)));
     add("reply_inspect_packets", QString::number(s.value("reply_inspect_packets").toInt(3)));
+    add("ip_frag_enabled", b(s.value("ip_frag_enabled").toBool(false)));
+    add("ip_frag_queue_num", QString::number(s.value("ip_frag_queue_num").toInt(2002)));
+    add("ip_frag_size", QString::number(s.value("ip_frag_size").toInt(512)));
+    add("ip_frag_inspect_packets", QString::number(s.value("ip_frag_inspect_packets").toInt(10)));
+    add("ip_frag_targets_file", QStringLiteral("/etc/mutekizu/ip_frag_targets.txt"));
+    add("ip_frag_ports", s.value("ip_frag_ports").toString());
     add("auto_domains_file", QStringLiteral("/var/lib/mutekizu/auto-domains.txt"));
     return out;
 }

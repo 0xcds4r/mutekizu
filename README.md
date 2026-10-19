@@ -521,13 +521,25 @@ sudo ~/mutekizu/scripts/install-all.sh --polkit-noauth
 * `split_jitter_ms=0..50` — случайная дополнительная пауза между сегментами.
 
 Стенд проверяет `split_disorder` и `split_multidisorder` с TLS integrity
-128 KiB — **36/36 проверок** (disorder, multidisorder, profiles, auto-profile). На реальном пути Discord проверен поставляемый
+128 KiB — **38/38 проверок** (disorder, multidisorder, profiles, auto-profile). На реальном пути Discord проверен поставляемый
 дефолт: gateway `READY`, голос `RTC_CONNECTED`. В двухnetns-стенде нет
 прыжка, где успевает истечь низкий TTL, поэтому fake/seqovl/UDP fake там не
 проверяются; если сеть их не принимает, отключай опцию по отдельности.
 
-Осталось нереализованным: INET_DIAG/conntrack health, IP-фрагментация и
-eBPF/XDP fast path. TCP MD5/AO-фулинг и hostlist-движок тоже пока нет.
+### IP-фрагментация для Telegram
+
+`ip_frag_enabled=true` включает отдельную NFQUEUE `2002` и nft-set с
+Telegram-подсетями из `ip_frag_targets.txt`. Для TCP-портов `80,443,5222`
+исходящий IP-пакет режется на IPv4/IPv6-фрагменты; TCP checksum
+пересчитывается. Это нужно для MTProto, у которого нет SNI.
+
+Профиль `[telegram]` в `profiles.conf` задаёт split/fake для Telegram
+TLS-доменов; IP-фрагментация работает по IP и не зависит от SNI. Размер
+фрагмента — `ip_frag_size=512`, первые пакеты — `ip_frag_inspect_packets`.
+
+Стенд проверяет IPv4 и IPv6 фрагментацию с TLS integrity — **38/38 проверок**.
+Осталось нереализованным: INET_DIAG/conntrack health и eBPF/XDP fast path.
+TCP MD5/AO-фулинг и hostlist-движок тоже пока нет.
 
 ---
 

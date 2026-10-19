@@ -45,6 +45,8 @@ public:
         std::uint64_t udp_fakes = 0;
         std::uint64_t reply_packets = 0;
         std::uint64_t server_hellos = 0;
+        std::uint64_t ipfrag_packets = 0;
+        std::uint64_t ipfrag_fragments = 0;
         std::uint64_t flows = 0;
     };
     const Stats& stats() const noexcept { return stats_; }
@@ -52,8 +54,10 @@ public:
 private:
     static int callback(nfq_q_handle* qh, nfgenmsg* nfmsg, nfq_data* nfad, void* ctx);
     static int reply_callback(nfq_q_handle* qh, nfgenmsg* nfmsg, nfq_data* nfad, void* ctx);
+    static int ipfrag_callback(nfq_q_handle* qh, nfgenmsg* nfmsg, nfq_data* nfad, void* ctx);
     int handle(nfq_q_handle* qh, nfq_data* nfad);
     int handle_reply(nfq_q_handle* qh, nfq_data* nfad);
+    int handle_ipfrag(nfq_q_handle* qh, nfq_data* nfad);
 
     struct FlowKey {
         std::uint8_t family = 0;
@@ -142,6 +146,7 @@ private:
     nfq_handle* nfq_ = nullptr;
     nfq_q_handle* queue_ = nullptr;
     nfq_q_handle* reply_queue_ = nullptr;
+    nfq_q_handle* ipfrag_queue_ = nullptr;
     int nfq_fd_ = -1;
     int raw4_ = -1;
     int raw6_ = -1;

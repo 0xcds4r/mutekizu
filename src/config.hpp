@@ -56,6 +56,12 @@ struct Config {
     bool reply_observe = true;       // separate NFQUEUE for server replies
     std::uint16_t reply_queue_num = 2001;
     std::uint32_t reply_inspect_packets = 3;
+    bool ip_frag_enabled = false;
+    std::uint16_t ip_frag_queue_num = 2002;
+    std::uint16_t ip_frag_size = 512;
+    std::uint32_t ip_frag_inspect_packets = 10;
+    std::string ip_frag_targets_file = "/etc/mutekizu/ip_frag_targets.txt";
+    std::vector<std::uint16_t> ip_frag_ports{443, 80, 5222};
     std::string log_level = "info";
     bool log_sni = false;
 
@@ -79,6 +85,12 @@ struct AddressSet {
     bool empty() const noexcept { return v4.empty() && v6.empty(); }
 };
 
+struct IpFragTargets {
+    std::vector<std::string> v4; // explicit IP or CIDR
+    std::vector<std::string> v6;
+    bool empty() const noexcept { return v4.empty() && v6.empty(); }
+};
+
 struct DomainSet {
     // Lowercase. An entry "example.com" matches example.com and *.example.com.
     std::vector<std::string> domains;
@@ -91,6 +103,7 @@ struct DomainSet {
 bool load_config(const std::string& path, Config& cfg, std::string& error);
 bool load_domains(const std::string& path, DomainSet& set, std::string& error);
 bool load_mss_targets(const std::string& path, AddressSet& set, std::string& error);
+bool load_ipfrag_targets(const std::string& path, IpFragTargets& set, std::string& error);
 
 bool valid_domain(std::string_view s) noexcept;
 std::string trim(std::string_view s);

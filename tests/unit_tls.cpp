@@ -137,7 +137,12 @@ int main()
                  "udp_fake_type=quic\n"
                  "fake_bad_checksum=true\n"
                  "fake_seq_offset=-7\n"
-                 "fake_timestamp=true\n";
+                 "fake_timestamp=true\n"
+                 "ip_frag_enabled=true\n"
+                 "ip_frag_queue_num=2003\n"
+                 "ip_frag_size=600\n"
+                 "ip_frag_inspect_packets=8\n"
+                 "ip_frag_ports=80,443,5222\n";
         }
         dpi::Config c;
         std::string err;
@@ -150,7 +155,10 @@ int main()
               c.auto_profile && c.auto_retry_window_s == 12 &&
               c.reply_observe && c.reply_queue_num == 2002 &&
               c.reply_inspect_packets == 4 && c.udp_fake_type == "quic" &&
-              c.fake_bad_checksum && c.fake_seq_offset == -7 && c.fake_timestamp,
+              c.fake_bad_checksum && c.fake_seq_offset == -7 && c.fake_timestamp &&
+              c.ip_frag_enabled && c.ip_frag_queue_num == 2003 &&
+              c.ip_frag_size == 600 && c.ip_frag_inspect_packets == 8 &&
+              c.ip_frag_ports.size() == 3,
               "advanced desync config keys parse");
         std::remove(path.c_str());
     }

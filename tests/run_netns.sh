@@ -545,7 +545,64 @@ fi
 stop_model
 stop_shield
 
+# ---------------------------------------------------------------- ip fragmentation
+log "IP fragmentation: Telegram-style target (IPv4 + IPv6)"
+cat > "$WORK/ipfrag-targets.txt" <<EOF
+10.0.0.1/32
+fd00::1/128
+EOF
+cat > "$WORK/ipfrag.conf" <<EOF
+split_enabled=true
+mss_clamp=false
+split_delta=4
+split_stride=4
+split_max=64
+split_gap_ms=0
+split_disorder=true
+fake_enabled=false
+seqovl_enabled=false
+mss=1200
+inspect_packets=10
+queue_num=2000
+fwmark=0x44495054
+max_queue_len=256
+copy_range=65535
+ipv4=true
+ipv6=true
+ports=443
+domains_file=$WORK/domains.txt
+mss_targets_file=$WORK/mss_targets.txt
+log_level=debug
+log_sni=false
+auto_discover=false
+max_flows=1024
+flow_buffer=8192
+flow_timeout_s=30
+reply_observe=true
+reply_queue_num=2001
+reply_inspect_packets=3
+ip_frag_enabled=true
+ip_frag_queue_num=2002
+ip_frag_size=512
+ip_frag_inspect_packets=10
+ip_frag_targets_file=$WORK/ipfrag-targets.txt
+ip_frag_ports=443
+EOF
+start_shield "$WORK/ipfrag.conf"
+if run_client 10.0.0.1 test.example 131072 8 | grep -q '^OK'; then
+    pass "IPv4 IP fragmentation delivers TLS"
+else
+    fail "IPv4 IP fragmentation failed"
+fi
+if run_client fd00::1 test.example 131072 8 | grep -q '^OK'; then
+    pass "IPv6 IP fragmentation delivers TLS"
+else
+    fail "IPv6 IP fragmentation failed"
+fi
+stop_shield
+
 # ---------------------------------------------------------------- performance
+
 
 
 

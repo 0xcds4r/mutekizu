@@ -392,6 +392,39 @@ Item {
                     }
                     Text { text: qsTr("Сколько первых reply-пакетов отдавать observer'у."); color: Theme.muted; font.family: Theme.font; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
 
+                    Text { text: qsTr("ip_frag_enabled"); color: Theme.warn; font.family: Theme.font }
+                    Switch {
+                        Material.accent: Theme.accent
+                        checked: backend.draft["ip_frag_enabled"] === true
+                        onToggled: backend.setSetting("ip_frag_enabled", checked)
+                    }
+                    Text { text: qsTr("IP-фрагментация для Telegram MTProto и других протоколов без SNI. Требует ip_frag_targets.txt."); color: Theme.warn; font.family: Theme.font; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+
+                    Text { text: qsTr("ip_frag_size"); color: Theme.text; font.family: Theme.font }
+                    SpinBox {
+                        from: 128; to: 9000
+                        value: backend.draft["ip_frag_size"] ?? 512
+                        onValueModified: page.setInt("ip_frag_size", value)
+                    }
+                    Text { text: qsTr("Размер IP-фрагмента; IPv4 округляется до 8 байт."); color: Theme.muted; font.family: Theme.font; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+
+                    Text { text: qsTr("ip_frag_queue_num"); color: Theme.text; font.family: Theme.font }
+                    SpinBox {
+                        from: 1; to: 65535
+                        value: backend.draft["ip_frag_queue_num"] ?? 2002
+                        onValueModified: page.setInt("ip_frag_queue_num", value)
+                    }
+                    Text { text: qsTr("Отдельная NFQUEUE для IP-фрагментации."); color: Theme.muted; font.family: Theme.font; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+
+                    Text { text: qsTr("ip_frag_ports"); color: Theme.text; font.family: Theme.font }
+                    TextField {
+                        implicitWidth: 180
+                        text: backend.draft["ip_frag_ports"] ?? "80,443,5222"
+                        font.family: Theme.font
+                        onEditingFinished: backend.setSetting("ip_frag_ports", text)
+                    }
+                    Text { text: qsTr("TCP-порты для IP-фрагментации."); color: Theme.muted; font.family: Theme.font; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+
                     Text { text: qsTr("auto_profile"); color: Theme.text; font.family: Theme.font }
                     Switch {
                         Material.accent: Theme.accent

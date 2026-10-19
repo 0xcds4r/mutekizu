@@ -61,6 +61,17 @@ bool send_fake_udp(int raw_fd, const UdpPacket& p,
                    const std::uint8_t* payload, std::size_t payload_len,
                    std::uint8_t ttl, std::uint16_t ip_id, std::string& error);
 
+struct FragmentResult {
+    bool ok = false;
+    std::size_t fragments = 0;
+    std::string error;
+};
+
+// Re-emits a complete L3 packet as IPv4/IPv6 fragments. The TCP/UDP checksum
+// is recomputed before fragmentation (NFQUEUE may see offload placeholders).
+FragmentResult fragment_l3_packet(int raw4, int raw6, const std::uint8_t* data,
+                                  std::size_t len, std::size_t frag_size);
+
 
 struct SendSplitResult {
     bool ok = false;

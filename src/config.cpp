@@ -292,6 +292,28 @@ bool load_config(const std::string& path, Config& cfg, std::string& error)
             std::uint64_t v = 0;
             if (!parse_u64(val, v) || v == 0 || v > 16) return bad("reply_inspect_packets");
             out.reply_inspect_packets = static_cast<std::uint32_t>(v);
+        } else if (key == "ip_frag_enabled") {
+            if (!parse_bool(val, out.ip_frag_enabled)) return bad("ip_frag_enabled");
+        } else if (key == "ip_frag_queue_num") {
+            std::uint64_t v = 0;
+            if (!parse_u64(val, v) || v == 0 || v > 65535) return bad("ip_frag_queue_num");
+            out.ip_frag_queue_num = static_cast<std::uint16_t>(v);
+        } else if (key == "ip_frag_size") {
+            std::uint64_t v = 0;
+            if (!parse_u64(val, v) || v < 128 || v > 9000) return bad("ip_frag_size");
+            out.ip_frag_size = static_cast<std::uint16_t>(v);
+        } else if (key == "ip_frag_inspect_packets") {
+            std::uint64_t v = 0;
+            if (!parse_u64(val, v) || v == 0 || v > 64) return bad("ip_frag_inspect_packets");
+            out.ip_frag_inspect_packets = static_cast<std::uint32_t>(v);
+        } else if (key == "ip_frag_targets_file") {
+            if (val.empty()) return bad("ip_frag_targets_file");
+            out.ip_frag_targets_file = val;
+        } else if (key == "ip_frag_ports") {
+            if (!parse_ports(val, out.ip_frag_ports, error)) {
+                error = "line " + std::to_string(line_no) + ": " + error;
+                return false;
+            }
         } else if (key == "log_level") {
             if (val != "error" && val != "warn" && val != "info" && val != "debug")
                 return bad("log_level");
@@ -343,6 +365,11 @@ bool load_config(const std::string& path, Config& cfg, std::string& error)
     }
     if (out.reply_observe && out.reply_queue_num == out.queue_num) {
         error = "reply_queue_num must differ from queue_num";
+        return false;
+    }
+    if (out.ip_frag_enabled && (out.ip_frag_queue_num == out.queue_num ||
+                                (out.reply_observe && out.ip_frag_queue_num == out.reply_queue_num))) {
+        error = "ip_frag_queue_num must differ from queue_num/reply_queue_num";
         return false;
     }
     if (!out.split_enabled && !out.mss_clamp) {
@@ -425,6 +452,63 @@ bool load_mss_targets(const std::string& path, AddressSet& set, std::string& err
     }
     if (out.empty()) { error = "MSS targets file contains no addresses: " + path; return false; }
     set = std::move(out);
+    return true;
+}
+
+bool load_ipfrag_targets(const std::string& path, IpFragTargets& set, std::string& error)
+{
+    set = {};
+    std::ifstream in(path);
+    if (!in) { error = "cannot open IP fragmentation targets: " + path; return false; }
+
+    std::string line;
+    unsigned line_no = 0;
+    while (std::getline(in, line)) {
+        ++line_no;
+        const auto hash = line.find('#');
+        if (hash != std::string::npos) line.erase(hash);
+        const std::string raw = trim(line);
+        if (raw.empty()) continue;
+        std::string addr = raw;
+        unsigned prefix = 0;
+        bool has_prefix = false;
+        const auto slash = raw.find('/');
+        if (slash != std::string::npos) {
+            addr = raw.substr(0, slash);
+            const std::string ps = raw.substr(slash + 1);
+            std::uint64_t v = 0;
+            if (!parse_u64(ps, v) || v > 128) {
+                error = "line " + std::to_string(line_no) + ": invalid prefix";
+                return false;
+            }
+            prefix = static_cast<unsigned>(v);
+            has_prefix = true;
+        }
+        std::uint8_t buf[16]{};
+        if (::inet_pton(AF_INET, addr.c_str(), buf) == 1) {
+            if (has_prefix && prefix > 32) {
+                error = "line " + std::to_string(line_no) + ": IPv4 prefix > 32";
+                return false;
+            }
+            set.v4.push_back(has_prefix ? raw : addr);
+        } else if (::inet_pton(AF_INET6, addr.c_str(), buf) == 1) {
+            set.v6.push_back(has_prefix ? raw : addr);
+        } else {
+            error = "line " + std::to_string(line_no) + ": invalid IP/CIDR '" + raw + "'";
+            return false;
+        }
+        if (set.v4.size() + set.v6.size() > 4096) {
+            error = "too many IP fragmentation targets (max 4096)";
+            return false;
+        }
+    }
+    auto unique = [](std::vector<std::string>& v) {
+        std::sort(v.begin(), v.end());
+        v.erase(std::unique(v.begin(), v.end()), v.end());
+    };
+    unique(set.v4);
+    unique(set.v6);
+    if (set.empty()) { error = "IP fragmentation target list is empty"; return false; }
     return true;
 }
 

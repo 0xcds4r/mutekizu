@@ -510,4 +510,134 @@ bool send_fake_udp(int raw_fd, const UdpPacket& p, const std::uint8_t* payload,
     return true;
 }
 
+FragmentResult fragment_l3_packet(int raw4, int raw6, const std::uint8_t* data,
+                                  std::size_t len, std::size_t frag_size)
+{
+    FragmentResult r;
+    if (data == nullptr || len < 28) { r.error = "short packet"; return r; }
+    const std::uint8_t version = static_cast<std::uint8_t>(data[0] >> 4);
+    std::size_t ip_hdr = 0;
+    std::uint8_t proto = 0;
+    std::size_t total = len;
+    if (version == 4) {
+        ip_hdr = static_cast<std::size_t>(data[0] & 0x0f) * 4;
+        if (ip_hdr < 20 || ip_hdr > len) { r.error = "bad IPv4 header"; return r; }
+        total = read16(data + 2);
+        if (total < ip_hdr + 8 || total > len) { r.error = "bad IPv4 length"; return r; }
+        const std::uint16_t frag = read16(data + 6);
+        if ((frag & 0x3fff) != 0) { r.error = "already fragmented"; return r; }
+        proto = data[9];
+        if (proto != kProtoTcp && proto != kProtoUdp) { r.error = "not TCP/UDP"; return r; }
+        if (raw4 < 0) { r.error = "raw IPv4 socket unavailable"; return r; }
+    } else if (version == 6) {
+        if (len < 48) { r.error = "short IPv6"; return r; }
+        ip_hdr = 40;
+        const std::uint16_t plen = read16(data + 4);
+        total = 40 + static_cast<std::size_t>(plen);
+        if (total > len) { r.error = "bad IPv6 length"; return r; }
+        proto = data[6];
+        if (proto != kProtoTcp && proto != kProtoUdp) { r.error = "not TCP/UDP"; return r; }
+        if (raw6 < 0) { r.error = "raw IPv6 socket unavailable"; return r; }
+    } else {
+        r.error = "not IP";
+        return r;
+    }
+
+    std::vector<std::uint8_t> pkt(data, data + total);
+    const std::size_t l4_len = total - ip_hdr;
+    if (proto == kProtoTcp && l4_len >= 20) {
+        const std::size_t thl = static_cast<std::size_t>(pkt[ip_hdr + 12] >> 4) * 4;
+        if (thl >= 20 && thl <= l4_len) {
+            pkt[ip_hdr + 16] = 0; pkt[ip_hdr + 17] = 0;
+            std::uint32_t sum = 0;
+            if (version == 4) {
+                sum = sum_bytes(sum, pkt.data() + 12, 4);
+                sum = sum_bytes(sum, pkt.data() + 16, 4);
+                sum += kProtoTcp;
+                sum += static_cast<std::uint16_t>(l4_len);
+            } else {
+                sum = sum_bytes(sum, pkt.data() + 8, 16);
+                sum = sum_bytes(sum, pkt.data() + 24, 16);
+                sum += static_cast<std::uint32_t>(l4_len >> 16);
+                sum += static_cast<std::uint16_t>(l4_len & 0xffff);
+                sum += kProtoTcp;
+            }
+            sum = sum_bytes(sum, pkt.data() + ip_hdr, l4_len);
+            write16(pkt.data() + ip_hdr + 16, checksum_fold(sum));
+        }
+    } else if (proto == kProtoUdp && l4_len >= 8) {
+        pkt[ip_hdr + 6] = 0; pkt[ip_hdr + 7] = 0;
+        std::uint32_t sum = 0;
+        if (version == 4) {
+            sum = sum_bytes(sum, pkt.data() + 12, 4);
+            sum = sum_bytes(sum, pkt.data() + 16, 4);
+            sum += kProtoUdp;
+            sum += static_cast<std::uint16_t>(l4_len);
+        } else {
+            sum = sum_bytes(sum, pkt.data() + 8, 16);
+            sum = sum_bytes(sum, pkt.data() + 24, 16);
+            sum += static_cast<std::uint32_t>(l4_len >> 16);
+            sum += static_cast<std::uint16_t>(l4_len & 0xffff);
+            sum += kProtoUdp;
+        }
+        sum = sum_bytes(sum, pkt.data() + ip_hdr, l4_len);
+        std::uint16_t c = checksum_fold(sum);
+        if (c == 0) c = 0xffff;
+        write16(pkt.data() + ip_hdr + 6, c);
+    }
+
+    std::size_t chunk = frag_size & ~static_cast<std::size_t>(7);
+    if (chunk < 128) chunk = 128;
+    const std::size_t payload_len = total - ip_hdr;
+    std::size_t offset = 0;
+    while (offset < payload_len) {
+        const std::size_t n = std::min(chunk, payload_len - offset);
+        const bool more = offset + n < payload_len;
+        std::vector<std::uint8_t> frag;
+        if (version == 4) {
+            frag.assign(ip_hdr + n, 0);
+            std::memcpy(frag.data(), pkt.data(), ip_hdr);
+            std::copy_n(pkt.data() + ip_hdr + offset, n, frag.data() + ip_hdr);
+            write16(frag.data() + 2, static_cast<std::uint16_t>(ip_hdr + n));
+            std::uint16_t flags = static_cast<std::uint16_t>((offset / 8) & 0x1fff);
+            if (more) flags |= 0x2000; // MF
+            write16(frag.data() + 6, flags);
+            write16(frag.data() + 10, 0);
+            write16(frag.data() + 10,
+                    checksum_fold(sum_bytes(0, frag.data(), ip_hdr)));
+            sockaddr_in dst{};
+            dst.sin_family = AF_INET;
+            std::memcpy(&dst.sin_addr, frag.data() + 16, 4);
+            if (::sendto(raw4, frag.data(), frag.size(), 0,
+                         reinterpret_cast<const sockaddr*>(&dst), sizeof(dst)) < 0) {
+                r.error = std::strerror(errno);
+                return r;
+            }
+        } else {
+            frag.assign(40 + 8 + n, 0);
+            std::memcpy(frag.data(), pkt.data(), 40);
+            frag[6] = 44; // Fragment extension
+            write16(frag.data() + 4, static_cast<std::uint16_t>(8 + n));
+            frag[40] = proto;
+            const std::uint16_t off_flags = static_cast<std::uint16_t>(
+                ((offset / 8) << 3) | (more ? 1 : 0));
+            write16(frag.data() + 42, off_flags);
+            write32(frag.data() + 44, 0x4d55aa00u);
+            std::copy_n(pkt.data() + ip_hdr + offset, n, frag.data() + 48);
+            sockaddr_in6 dst{};
+            dst.sin6_family = AF_INET6;
+            std::memcpy(&dst.sin6_addr, frag.data() + 24, 16);
+            if (::sendto(raw6, frag.data(), frag.size(), 0,
+                         reinterpret_cast<const sockaddr*>(&dst), sizeof(dst)) < 0) {
+                r.error = std::strerror(errno);
+                return r;
+            }
+        }
+        ++r.fragments;
+        offset += n;
+    }
+    r.ok = r.fragments > 0;
+    return r;
+}
+
 } // namespace dpi

@@ -109,6 +109,7 @@ NfqEngine::~NfqEngine()
     stopping_.store(true, std::memory_order_relaxed);
     for (int i = 0; i < 300 && probesInFlight_.load(std::memory_order_relaxed) > 0; ++i)
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    if (ipfrag_queue_ != nullptr) nfq_destroy_queue(ipfrag_queue_);
     if (reply_queue_ != nullptr) nfq_destroy_queue(reply_queue_);
     if (queue_ != nullptr) nfq_destroy_queue(queue_);
     if (nfq_ != nullptr) nfq_close(nfq_);
@@ -601,6 +602,40 @@ int NfqEngine::handle_reply(nfq_q_handle* qh, nfq_data* nfad)
         }
     }
     return nfq_set_verdict(qh, id, NF_ACCEPT, 0, nullptr);
+}
+
+int NfqEngine::ipfrag_callback(nfq_q_handle* qh, nfgenmsg* nfmsg, nfq_data* nfad,
+                               void* ctx)
+{
+    (void)nfmsg;
+    auto* self = static_cast<NfqEngine*>(ctx);
+    return self->handle_ipfrag(qh, nfad);
+}
+
+int NfqEngine::handle_ipfrag(nfq_q_handle* qh, nfq_data* nfad)
+{
+    nfqnl_msg_packet_hdr* ph = nfq_get_msg_packet_hdr(nfad);
+    if (ph == nullptr) return -1;
+    const std::uint32_t id = ntohl(ph->packet_id);
+    unsigned char* data = nullptr;
+    const int len = nfq_get_payload(nfad, &data);
+    if (len <= 0 || data == nullptr)
+        return nfq_set_verdict(qh, id, NF_ACCEPT, 0, nullptr);
+
+    TcpPacket pkt;
+    if (!parse_l3_packet(data, static_cast<std::size_t>(len), pkt))
+        return nfq_set_verdict(qh, id, NF_ACCEPT, 0, nullptr);
+
+    ++stats_.ipfrag_packets;
+    const FragmentResult fr = fragment_l3_packet(raw4_, raw6_, data,
+                                                  static_cast<std::size_t>(len),
+                                                  cfg_.ip_frag_size);
+    if (!fr.ok) {
+        log_msg(LogLevel::Debug, "ipfrag failed: %s", fr.error.c_str());
+        return nfq_set_verdict(qh, id, NF_ACCEPT, 0, nullptr);
+    }
+    stats_.ipfrag_fragments += fr.fragments;
+    return nfq_set_verdict(qh, id, NF_DROP, 0, nullptr);
 }
 
 int NfqEngine::handle(nfq_q_handle* qh, nfq_data* nfad)

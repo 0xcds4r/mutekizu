@@ -120,6 +120,11 @@ QVariantMap Backend::defaults()
     m["reply_observe"] = true;
     m["reply_queue_num"] = 2001;
     m["reply_inspect_packets"] = 3;
+    m["ip_frag_enabled"] = false;
+    m["ip_frag_queue_num"] = 2002;
+    m["ip_frag_size"] = 512;
+    m["ip_frag_inspect_packets"] = 10;
+    m["ip_frag_ports"] = QStringLiteral("80,443,5222");
     return m;
 }
 
@@ -706,6 +711,12 @@ QString Backend::settingsToConfig(const QVariantMap& s, const QString& domainsPa
     add("reply_observe", b(s.value("reply_observe")));
     add("reply_queue_num", QString::number(s.value("reply_queue_num").toInt()));
     add("reply_inspect_packets", QString::number(s.value("reply_inspect_packets").toInt()));
+    add("ip_frag_enabled", b(s.value("ip_frag_enabled")));
+    add("ip_frag_queue_num", QString::number(s.value("ip_frag_queue_num").toInt()));
+    add("ip_frag_size", QString::number(s.value("ip_frag_size").toInt()));
+    add("ip_frag_inspect_packets", QString::number(s.value("ip_frag_inspect_packets").toInt()));
+    add("ip_frag_targets_file", QStringLiteral("/etc/mutekizu/ip_frag_targets.txt"));
+    add("ip_frag_ports", s.value("ip_frag_ports").toString());
     add("auto_domains_file", QStringLiteral("/var/lib/mutekizu/auto-domains.txt"));
     return out;
 }
