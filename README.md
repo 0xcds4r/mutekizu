@@ -1,4 +1,5 @@
 [![build](https://github.com/0xcds4r/mutekizu/actions/workflows/build.yml/badge.svg)](https://github.com/0xcds4r/mutekizu/actions/workflows/build.yml)
+[![release](https://github.com/0xcds4r/mutekizu/actions/workflows/release.yml/badge.svg)](https://github.com/0xcds4r/mutekizu/actions/workflows/release.yml)
 
 # mutekizu
 
@@ -634,3 +635,17 @@ seqovl_bytes = 646
 параллельные соединения к одному SNI могут вызвать лишнюю ротацию. Для
 предсказуемости задавай `auto_retry_window_s` больше типичного интервала
 повторной попытки приложения.
+
+
+## 15. Релизы
+
+Тег `v*` запускает `.github/workflows/release.yml`: сборка в Arch Linux,
+`ctest`, пакет `mutekizu-<version>-linux-x86_64.tar.gz` с бинарниками,
+конфигами и systemd-unit, SHA-256 и публикация GitHub Release.
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Ручной запуск: Actions → release → Run workflow → tag `v0.1.0`.

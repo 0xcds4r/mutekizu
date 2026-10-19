@@ -1,0 +1,118 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, e.g. v0.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  release:
+    name: Package and publish
+    runs-on: ubuntu-24.04
+    container:
+      image: archlinux:latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Validate version
+        run: |
+          case "$RELEASE_TAG" in
+            v*) ;;
+            *) echo "release tag must start with v" >&2; exit 1 ;;
+          esac
+          echo "VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
+
+      - name: Bootstrap git
+        run: pacman -Sy --noconfirm --needed git tar
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install build dependencies
+        run: |
+          pacman -Syu --noconfirm --needed \
+            base-devel cmake ninja pkgconf \
+            libnetfilter_queue \
+            qt6-base qt6-declarative
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel "$(nproc)"
+
+      - name: Test
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QT_QUICK_BACKEND: software
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          STAGE="$RUNNER_TEMP/pkg/mutekizu-$VERSION"
+          install -d \
+            "$STAGE/usr/local/bin" \
+            "$STAGE/usr/libexec" \
+            "$STAGE/etc/mutekizu" \
+            "$STAGE/usr/lib/systemd/system" \
+            "$STAGE/usr/local/share/doc/mutekizu"
+
+          install -m 0755 build/mutekizu "$STAGE/usr/local/bin/mutekizu"
+          install -m 0755 build/gui/mutekizu-gui "$STAGE/usr/local/bin/mutekizu-gui"
+          install -m 0755 build/gui/mutekizu-config-helper \
+            "$STAGE/usr/libexec/mutekizu-config-helper"
+
+          install -m 0644 config/mutekizu.conf config/domains.txt \
+            config/mss_targets.txt config/profiles.conf \
+            config/ip_frag_targets.txt "$STAGE/etc/mutekizu/"
+          install -m 0644 systemd/mutekizu.service \
+            "$STAGE/usr/lib/systemd/system/mutekizu.service"
+          install -m 0644 README.md "$STAGE/usr/local/share/doc/mutekizu/README.md"
+          install -m 0644 LICENSE "$STAGE/usr/local/share/doc/mutekizu/LICENSE"
+
+          tar -C "$RUNNER_TEMP/pkg" -czf \
+            "$RUNNER_TEMP/mutekizu-${VERSION}-linux-x86_64.tar.gz" \
+            "mutekizu-$VERSION"
+          sha256sum "$RUNNER_TEMP/mutekizu-${VERSION}-linux-x86_64.tar.gz" \
+            > "$RUNNER_TEMP/mutekizu-${VERSION}-linux-x86_64.tar.gz.sha256"
+          tar -tzf "$RUNNER_TEMP/mutekizu-${VERSION}-linux-x86_64.tar.gz" | head -30
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutekizu-${{ env.VERSION }}-linux-x86_64
+          path: |
+            ${{ runner.temp }}/mutekizu-*.tar.gz
+            ${{ runner.temp }}/mutekizu-*.tar.gz.sha256
+          if-no-files-found: error
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Mutekizu ${{ env.VERSION }}
+          generate_release_notes: true
+          prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
+          fail_on_unmatched_files: true
+          files: |
+            ${{ runner.temp }}/mutekizu-*.tar.gz
+            ${{ runner.temp }}/mutekizu-*.tar.gz.sha256
