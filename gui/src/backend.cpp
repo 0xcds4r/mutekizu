@@ -140,6 +140,7 @@ void Backend::loadDemo()
     m_draftMssTargets = m_mssTargets;
     m_profilesText = profileTemplate(QStringLiteral("discord"));
     m_draftProfilesText = m_profilesText;
+    rebuildProfileBlocks();
     m_configAvailable = true;
     m_diagnostics = {
         QVariantMap{{"level", "ok"}, {"text", "Демо-среда: ядро, nftables и модули доступны"}},
@@ -174,6 +175,7 @@ void Backend::loadReal()
     m_draftDomains = m_domains;
     m_draftMssTargets = m_mssTargets;
     m_draftProfilesText = m_profilesText;
+    rebuildProfileBlocks();
     m_dirty = false;
     m_conflict = false;
     rememberHashes();
@@ -228,6 +230,8 @@ void Backend::loadFiles()
     QFile pf(m_profilesPath);
     m_profilesText = pf.open(QIODevice::ReadOnly | QIODevice::Text)
                          ? QString::fromUtf8(pf.readAll()) : QString();
+    m_draftProfilesText = m_profilesText;
+    rebuildProfileBlocks();
 }
 
 
@@ -332,7 +336,136 @@ void Backend::setMssTargets(const QStringList& targets)
 void Backend::setProfilesText(const QString& text)
 {
     m_draftProfilesText = text;
+    rebuildProfileBlocks();
     recomputeDirty();
+}
+
+QString Backend::profileTextAt(int index) const
+{
+    if (index < 0 || index >= m_profileList.size()) return {};
+    return m_profileList.at(index).toMap().value(QStringLiteral("text")).toString();
+}
+
+void Backend::rebuildProfileBlocks()
+{
+    m_profilePreamble.clear();
+    m_profileList.clear();
+    QString preamble;
+    QString current;
+    bool in_block = false;
+
+    auto flush = [this](QString& block) {
+        if (block.isEmpty()) return;
+        QString name;
+        QString summary;
+        const QStringList lines = block.split('\n');
+        for (const QString& line : lines) {
+            const QString t = line.trimmed();
+            if (name.isEmpty() && t.startsWith('[') && t.endsWith(']'))
+                name = t.mid(1, t.size() - 2).trimmed();
+            if (summary.isEmpty()) {
+                const int eq = t.indexOf('=');
+                if (eq > 0 && t.left(eq).trimmed() == "domains")
+                    summary = t.mid(eq + 1).trimmed();
+            }
+        }
+        if (name.isEmpty()) return;
+        QVariantMap m;
+        m["name"] = name;
+        m["summary"] = summary.isEmpty() ? tr("домены не заданы") : summary;
+        m["text"] = block;
+        m_profileList.append(m);
+        block.clear();
+    };
+
+    for (QString line : m_draftProfilesText.split('\n')) {
+        const QString t = line.trimmed();
+        if (t.startsWith('[') && t.endsWith(']')) {
+            flush(current);
+            in_block = true;
+        }
+        if (in_block) {
+            current += line + '\n';
+        } else {
+            preamble += line + '\n';
+        }
+    }
+    flush(current);
+    m_profilePreamble = preamble;
+    emit profilesChanged();
+}
+
+void Backend::setProfileBlock(int index, const QString& text)
+{
+    if (index < 0 || index >= m_profileList.size()) return;
+    QVariantMap m = m_profileList.at(index).toMap();
+    m["text"] = text;
+    m_profileList[index] = m;
+
+    // Keep the canonical text in sync without reparsing on every keystroke:
+    // reparsing here would rewrite the editor's trailing newline and move the
+    // cursor. The list summary is refreshed when the editor loses focus.
+    QString full = m_profilePreamble;
+    for (const QVariant& v : m_profileList) {
+        QString block = v.toMap().value("text").toString();
+        if (block.isEmpty()) continue;
+        if (!full.isEmpty() && !full.endsWith('\n')) full += '\n';
+        if (!full.isEmpty() && !full.endsWith("\n\n")) full += '\n';
+        if (!block.endsWith('\n')) block += '\n';
+        full += block;
+    }
+    m_draftProfilesText = full;
+    recomputeDirty();
+}
+
+void Backend::refreshProfiles()
+{
+    rebuildProfileBlocks();
+}
+
+void Backend::addProfile()
+{
+    QString name = QStringLiteral("profile");
+    int n = 1;
+    while (m_draftProfilesText.contains(QStringLiteral("[%1]").arg(name))) {
+        name = QStringLiteral("profile%1").arg(n++);
+    }
+    setProfilesText(m_draftProfilesText + QStringLiteral("\n[%1]\ndomains = \n").arg(name));
+}
+
+void Backend::addProfileTemplate(const QString& kind)
+{
+    setProfilesText(m_draftProfilesText + QLatin1Char('\n') + profileTemplate(kind));
+}
+
+void Backend::removeProfile(int index)
+{
+    if (index < 0 || index >= m_profileList.size()) return;
+    QString full = m_profilePreamble;
+    for (int i = 0; i < m_profileList.size(); ++i) {
+        if (i == index) continue;
+        QString block = m_profileList.at(i).toMap().value("text").toString();
+        if (!block.endsWith('\n')) block += '\n';
+        full += block;
+    }
+    setProfilesText(full);
+}
+
+void Backend::duplicateProfile(int index)
+{
+    if (index < 0 || index >= m_profileList.size()) return;
+    QString block = m_profileList.at(index).toMap().value("text").toString();
+    const int nl = block.indexOf('\n');
+    QString header = nl >= 0 ? block.left(nl) : block;
+    const int end = header.lastIndexOf(']');
+    const QString base = (header.startsWith('[') && end > 0)
+                             ? header.mid(1, end - 1) : QStringLiteral("profile");
+    QString name = base + QStringLiteral("-copy");
+    int n = 1;
+    while (m_draftProfilesText.contains(QStringLiteral("[%1]").arg(name)))
+        name = base + QStringLiteral("-copy%1").arg(n++);
+    block.replace(0, end + 1, QStringLiteral("[%1]").arg(name));
+    setProfilesText(m_draftProfilesText + QLatin1Char('\n') + block);
 }
 
 QString Backend::profileTemplate(const QString& kind) const
@@ -388,6 +521,7 @@ void Backend::revertDraft()
     m_draftDomains = m_domains;
     m_draftMssTargets = m_mssTargets;
     m_draftProfilesText = m_profilesText;
+    rebuildProfileBlocks();
     m_conflict = false;
     emit conflictChanged();
     recomputeDirty();
@@ -402,6 +536,7 @@ void Backend::reloadFromDisk()
         m_draftDomains = m_domains;
         m_draftMssTargets = m_mssTargets;
         m_draftProfilesText = m_profilesText;
+        rebuildProfileBlocks();
         rememberHashes();
     }
     m_conflict = false;
@@ -907,6 +1042,7 @@ void Backend::applyDraft()
         m_domains = m_draftDomains;
         m_mssTargets = m_draftMssTargets;
         m_profilesText = m_draftProfilesText;
+        rebuildProfileBlocks();
         m_dirty = false;
         emit dirtyChanged();
         emit configChanged();
@@ -961,6 +1097,7 @@ void Backend::applyDraft()
         m_draftDomains = m_domains;
         m_draftMssTargets = m_mssTargets;
         m_draftProfilesText = m_profilesText;
+        rebuildProfileBlocks();
         rememberHashes();
         m_dirty = false;
         m_conflict = false;

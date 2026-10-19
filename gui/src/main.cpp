@@ -55,6 +55,16 @@ int selfTest()
     b.setDomains({QStringLiteral("example.com"), QStringLiteral("sub.example.com")});
     check(b.validateDraft().isEmpty(), "valid domains accepted");
 
+    const int initialProfiles = b.profileList().size();
+    check(initialProfiles >= 1, "demo profiles are parsed");
+    b.addProfileTemplate("youtube");
+    check(b.profileList().size() > initialProfiles, "profile template is appended");
+    b.duplicateProfile(0);
+    check(b.profileList().size() > initialProfiles + 1, "profile is duplicated");
+    const int beforeRemove = b.profileList().size();
+    b.removeProfile(0);
+    check(b.profileList().size() == beforeRemove - 1, "profile is removed");
+
     b.setSetting("split_delta", 0);
     check(!b.validateDraft().isEmpty(), "invalid split_delta rejected");
     b.setSetting("split_delta", 4);

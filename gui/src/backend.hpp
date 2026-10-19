@@ -40,6 +40,7 @@ class Backend : public QObject {
     Q_PROPERTY(QStringList draftMssTargets READ draftMssTargets NOTIFY draftChanged)
     Q_PROPERTY(QString profilesText READ profilesText NOTIFY draftChanged)
     Q_PROPERTY(QString draftProfilesText READ draftProfilesText NOTIFY draftChanged)
+    Q_PROPERTY(QVariantList profileList READ profileList NOTIFY profilesChanged)
     Q_PROPERTY(QString activeModes READ activeModes NOTIFY draftChanged)
     Q_PROPERTY(QString lastError READ lastError NOTIFY errorChanged)
     Q_PROPERTY(QString lastErrorHint READ lastErrorHint NOTIFY errorChanged)
@@ -76,6 +77,7 @@ public:
     QStringList draftMssTargets() const { return m_draftMssTargets; }
     QString profilesText() const { return m_profilesText; }
     QString draftProfilesText() const { return m_draftProfilesText; }
+    QVariantList profileList() const { return m_profileList; }
     QString activeModes() const;
     QString lastError() const { return m_lastError; }
     QString lastErrorHint() const { return m_lastErrorHint; }
@@ -99,6 +101,13 @@ public:
     Q_INVOKABLE void setMssTargets(const QStringList& targets);
     Q_INVOKABLE void setProfilesText(const QString& text);
     Q_INVOKABLE QString profileTemplate(const QString& kind) const;
+    Q_INVOKABLE QString profileTextAt(int index) const;
+    Q_INVOKABLE void setProfileBlock(int index, const QString& text);
+    Q_INVOKABLE void addProfile();
+    Q_INVOKABLE void addProfileTemplate(const QString& kind);
+    Q_INVOKABLE void removeProfile(int index);
+    Q_INVOKABLE void duplicateProfile(int index);
+    Q_INVOKABLE void refreshProfiles();
     Q_INVOKABLE void addDomain(const QString& domain);
     Q_INVOKABLE void addMssTarget(const QString& target);
     Q_INVOKABLE void revertDraft();
@@ -123,6 +132,7 @@ signals:
     void logsChanged();
     void metaChanged();
     void applyStateChanged();
+    void profilesChanged();
 
 private slots:
     void onPropertiesChanged(const QString& iface, const QVariantMap& changed,
@@ -137,6 +147,7 @@ private:
     void clearError();
     void setBusy(bool busy);
     void recomputeDirty();
+    void rebuildProfileBlocks();
     static QVariantMap defaults();
     static bool validDomain(const QString& d);
     static bool validAddress(const QString& a);
@@ -184,6 +195,8 @@ private:
     QStringList m_draftMssTargets;
     QString m_profilesText;
     QString m_draftProfilesText;
+    QString m_profilePreamble;
+    QVariantList m_profileList;
     QVariantList m_diagnostics;
     QVariantList m_logs;
     QHash<QString, QString> m_hashes;
