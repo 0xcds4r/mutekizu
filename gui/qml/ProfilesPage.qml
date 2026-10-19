@@ -215,6 +215,10 @@ Item {
                     Text { text: qsTr("Имя"); color: Theme.text; font.family: Theme.font; Layout.preferredWidth: 105 }
                     TextField {
                         id: profileName
+                        leftPadding: 12
+                        rightPadding: 12
+                        topPadding: 9
+                        bottomPadding: 9
                         Layout.fillWidth: true
                         Layout.preferredHeight: 40
                         enabled: backend.profileList.length > 0
@@ -231,6 +235,10 @@ Item {
                     Text { text: qsTr("Домены"); color: Theme.text; font.family: Theme.font; Layout.preferredWidth: 105 }
                     TextField {
                         id: profileDomains
+                        leftPadding: 12
+                        rightPadding: 12
+                        topPadding: 9
+                        bottomPadding: 9
                         Layout.fillWidth: true
                         Layout.preferredHeight: 40
                         enabled: backend.profileList.length > 0
@@ -247,6 +255,10 @@ Item {
                     Text { text: qsTr("Интерфейсы"); color: Theme.text; font.family: Theme.font; Layout.preferredWidth: 105 }
                     TextField {
                         id: profileInterfaces
+                        leftPadding: 12
+                        rightPadding: 12
+                        topPadding: 9
+                        bottomPadding: 9
                         Layout.fillWidth: true
                         Layout.preferredHeight: 40
                         enabled: backend.profileList.length > 0
@@ -265,6 +277,10 @@ Item {
                 Layout.fillHeight: true
                 Layout.minimumHeight: 360
                 text: page.currentText()
+                leftPadding: 12
+                rightPadding: 12
+                topPadding: 10
+                bottomPadding: 10
                 enabled: backend.profileList.length > 0
                 onTextChanged: {
                     if (page.selected < backend.profileList.length &&
