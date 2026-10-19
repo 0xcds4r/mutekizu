@@ -94,15 +94,18 @@ jobs:
             "mutekizu-$VERSION"
           sha256sum "$RUNNER_TEMP/mutekizu-${VERSION}-linux-x86_64.tar.gz" \
             > "$RUNNER_TEMP/mutekizu-${VERSION}-linux-x86_64.tar.gz.sha256"
+          test -f "$RUNNER_TEMP/mutekizu-${VERSION}-linux-x86_64.tar.gz.sha256"
+          install -d "$RUNNER_TEMP/release"
+          cp "$RUNNER_TEMP"/mutekizu-*.tar.gz \
+            "$RUNNER_TEMP"/mutekizu-*.tar.gz.sha256 "$RUNNER_TEMP/release/"
+          ls -l "$RUNNER_TEMP/release"
           tar -tzf "$RUNNER_TEMP/mutekizu-${VERSION}-linux-x86_64.tar.gz" | head -30
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: mutekizu-${{ env.VERSION }}-linux-x86_64
-          path: |
-            ${{ runner.temp }}/mutekizu-*.tar.gz
-            ${{ runner.temp }}/mutekizu-*.tar.gz.sha256
+          path: ${{ runner.temp }}/release/*
           if-no-files-found: error
 
       - name: Publish GitHub release
@@ -113,6 +116,4 @@ jobs:
           generate_release_notes: true
           prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
           fail_on_unmatched_files: true
-          files: |
-            ${{ runner.temp }}/mutekizu-*.tar.gz
-            ${{ runner.temp }}/mutekizu-*.tar.gz.sha256
+          files: ${{ runner.temp }}/release/*
