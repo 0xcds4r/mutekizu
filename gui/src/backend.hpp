@@ -108,6 +108,8 @@ public:
     Q_INVOKABLE void removeProfile(int index);
     Q_INVOKABLE void duplicateProfile(int index);
     Q_INVOKABLE void refreshProfiles();
+    Q_INVOKABLE QString profileValue(int index, const QString& key) const;
+    Q_INVOKABLE void setProfileValue(int index, const QString& key, const QString& value);
     Q_INVOKABLE void addDomain(const QString& domain);
     Q_INVOKABLE void addMssTarget(const QString& target);
     Q_INVOKABLE void revertDraft();

@@ -423,6 +423,62 @@ void Backend::refreshProfiles()
     rebuildProfileBlocks();
 }
 
+QString Backend::profileValue(int index, const QString& key) const
+{
+    if (index < 0 || index >= m_profileList.size()) return {};
+    const QString block = m_profileList.at(index).toMap().value("text").toString();
+    for (const QString& line : block.split('\n')) {
+        const QString t = line.trimmed();
+        if (key == "name" && t.startsWith('[') && t.endsWith(']'))
+            return t.mid(1, t.size() - 2).trimmed();
+        const int eq = t.indexOf('=');
+        if (eq > 0 && t.left(eq).trimmed() == key)
+            return t.mid(eq + 1).trimmed();
+    }
+    return {};
+}
+
+void Backend::setProfileValue(int index, const QString& key, const QString& value)
+{
+    if (index < 0 || index >= m_profileList.size()) return;
+    QString block = m_profileList.at(index).toMap().value("text").toString();
+    QStringList lines = block.split('\n');
+    if (key == "name") {
+        const QString name = value.trimmed();
+        if (name.isEmpty()) return;
+        for (QString& line : lines) {
+            const QString t = line.trimmed();
+            if (t.startsWith('[') && t.endsWith(']')) {
+                line = QStringLiteral("[%1]").arg(name);
+                break;
+            }
+        }
+    } else {
+        bool found = false;
+        for (int i = 0; i < lines.size(); ++i) {
+            const QString t = lines[i].trimmed();
+            const int eq = t.indexOf('=');
+            if (eq > 0 && t.left(eq).trimmed() == key) {
+                if (value.trimmed().isEmpty())
+                    lines.removeAt(i);
+                else
+                    lines[i] = QStringLiteral("%1 = %2").arg(key, value.trimmed());
+                found = true;
+                break;
+            }
+        }
+        if (!found && !value.trimmed().isEmpty()) {
+            while (!lines.isEmpty() && lines.last().trimmed().isEmpty()) lines.removeLast();
+            lines << QStringLiteral("%1 = %2").arg(key, value.trimmed());
+            lines << QString();
+        }
+    }
+    QString edited = lines.join('\n');
+    if (!edited.endsWith('\n')) edited += '\n';
+    setProfileBlock(index, edited);
+    refreshProfiles();
+}
+
 void Backend::addProfile()
 {
     QString name = QStringLiteral("profile");

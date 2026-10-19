@@ -59,11 +59,28 @@ int selfTest()
     check(initialProfiles >= 1, "demo profiles are parsed");
     b.addProfileTemplate("youtube");
     check(b.profileList().size() > initialProfiles, "profile template is appended");
+    const int newIndex = b.profileList().size() - 1;
+    const QString before = b.profileTextAt(newIndex);
+    check(before.contains("youtube"), "new profile block is present");
+    b.setProfileBlock(newIndex, before + "split_jitter_ms = 2\n");
+    check(b.draftProfilesText().contains("split_jitter_ms = 2"),
+          "profile edit reaches draft text");
+    b.refreshProfiles();
+    check(b.profileTextAt(newIndex).contains("split_jitter_ms = 2"),
+          "profile edit survives refresh");
+    b.setProfileValue(newIndex, "domains", "example.org");
+    check(b.profileValue(newIndex, "domains") == "example.org",
+          "quick profile fields update the block");
+    b.setProfileValue(newIndex, "interfaces", "");
+    check(b.profileValue(newIndex, "interfaces").isEmpty(),
+          "empty interface removes the key");
     b.duplicateProfile(0);
     check(b.profileList().size() > initialProfiles + 1, "profile is duplicated");
     const int beforeRemove = b.profileList().size();
     b.removeProfile(0);
     check(b.profileList().size() == beforeRemove - 1, "profile is removed");
+    check(!b.draftProfilesText().contains("[discord-safe]"),
+          "removed profile is gone from text");
 
     b.setSetting("split_delta", 0);
     check(!b.validateDraft().isEmpty(), "invalid split_delta rejected");

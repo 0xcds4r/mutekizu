@@ -22,6 +22,23 @@ Item {
         editor.text = currentText()
     }
 
+    function syncFields() {
+        if (backend.profileList.length > selected) {
+            if (!profileName.activeFocus) profileName.text = backend.profileValue(selected, "name")
+            if (!profileDomains.activeFocus) profileDomains.text = backend.profileValue(selected, "domains")
+            if (!profileInterfaces.activeFocus) profileInterfaces.text = backend.profileValue(selected, "interfaces")
+        } else {
+            profileName.text = ""
+            profileDomains.text = ""
+            profileInterfaces.text = ""
+        }
+        if (!editor.activeFocus && editor.text !== currentText())
+            editor.text = currentText()
+    }
+
+    onSelectedChanged: syncFields()
+    Component.onCompleted: syncFields()
+
     function check() {
         validationText = backend.validateDraft()
         if (validationText.length === 0) validationText = qsTr("Проверка пройдена.")
@@ -32,8 +49,7 @@ Item {
         function onProfilesChanged() {
             if (selected >= backend.profileList.length)
                 selected = Math.max(0, backend.profileList.length - 1)
-            if (!editor.activeFocus && editor.text !== currentText())
-                editor.text = currentText()
+            syncFields()
         }
     }
 
@@ -165,11 +181,65 @@ Item {
 
             Text {
                 Layout.fillWidth: true
-                text: qsTr("Имя профиля задаётся строкой [name]. Домены и интерфейсы — через запятую. Ключи стратегии — только те, что отличаются от mutekizu.conf.")
+                text: qsTr("Быстрые поля: имя, домены и интерфейсы. Ниже — только стратегия профиля; ключи, совпадающие с mutekizu.conf, можно не писать.")
                 color: Theme.muted
                 font.family: Theme.font
                 font.pixelSize: 11
                 wrapMode: Text.WordWrap
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 6
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+                    Text { text: qsTr("Имя"); color: Theme.text; font.family: Theme.font; Layout.preferredWidth: 105 }
+                    TextField {
+                        id: profileName
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 40
+                        enabled: backend.profileList.length > 0
+                        font.family: Theme.font
+                        onEditingFinished: {
+                            backend.setProfileValue(page.selected, "name", text)
+                            page.syncFields()
+                        }
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+                    Text { text: qsTr("Домены"); color: Theme.text; font.family: Theme.font; Layout.preferredWidth: 105 }
+                    TextField {
+                        id: profileDomains
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 40
+                        enabled: backend.profileList.length > 0
+                        font.family: Theme.font
+                        onEditingFinished: {
+                            backend.setProfileValue(page.selected, "domains", text)
+                            page.syncFields()
+                        }
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+                    Text { text: qsTr("Интерфейсы"); color: Theme.text; font.family: Theme.font; Layout.preferredWidth: 105 }
+                    TextField {
+                        id: profileInterfaces
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 40
+                        enabled: backend.profileList.length > 0
+                        font.family: Theme.font
+                        onEditingFinished: {
+                            backend.setProfileValue(page.selected, "interfaces", text)
+                            page.syncFields()
+                        }
+                    }
+                }
             }
 
             TextArea {
