@@ -128,7 +128,9 @@ int main()
                  "seqovl_repeats=2\n"
                  "udp_fake_enabled=true\n"
                  "udp_fake_ttl=4\n"
-                 "udp_fake_repeats=5\n";
+                 "udp_fake_repeats=5\n"
+                 "auto_profile=true\n"
+                 "auto_retry_window_s=12\n";
         }
         dpi::Config c;
         std::string err;
@@ -137,7 +139,8 @@ int main()
               c.split_jitter_ms == 5 && c.fake_enabled && c.fake_ttl == 7 &&
               c.fake_repeats == 4 && c.fake_sni == "probe.example" &&
               c.seqovl_enabled && c.seqovl_bytes == 700 && c.seqovl_repeats == 2 &&
-              c.udp_fake_enabled && c.udp_fake_ttl == 4 && c.udp_fake_repeats == 5,
+              c.udp_fake_enabled && c.udp_fake_ttl == 4 && c.udp_fake_repeats == 5 &&
+              c.auto_profile && c.auto_retry_window_s == 12,
               "advanced desync config keys parse");
         std::remove(path.c_str());
     }

@@ -47,6 +47,8 @@ struct Config {
     std::vector<std::uint16_t> ports{443};
     std::string domains_file = "/etc/mutekizu/domains.txt";
     std::string profiles_file = "/etc/mutekizu/profiles.conf";
+    bool auto_profile = true;      // rotate matching profiles on failed attempts
+    std::uint16_t auto_retry_window_s = 10;
     std::string log_level = "info";
     bool log_sni = false;
 

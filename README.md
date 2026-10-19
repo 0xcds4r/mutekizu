@@ -515,7 +515,7 @@ sudo ~/mutekizu/scripts/install-all.sh --polkit-noauth
 * `split_jitter_ms=0..50` — случайная дополнительная пауза между сегментами.
 
 Стенд проверяет `split_disorder` и `split_multidisorder` с TLS integrity
-128 KiB — **33/33 проверки**. На реальном пути Discord проверен поставляемый
+128 KiB — **36/36 проверок** (disorder, multidisorder, profiles, auto-profile). На реальном пути Discord проверен поставляемый
 дефолт: gateway `READY`, голос `RTC_CONNECTED`. В двухnetns-стенде нет
 прыжка, где успевает истечь низкий TTL, поэтому fake/seqovl/UDP fake там не
 проверяются; если сеть их не принимает, отключай опцию по отдельности.
@@ -563,3 +563,39 @@ fake_enabled = false
 Путь задаётся ключом `profiles_file=` (по умолчанию
 `/etc/mutekizu/profiles.conf`). Файл создаётся установщиком с примерами в
 комментариях; если его нет, работают глобальные настройки.
+
+### Автоподбор профилей
+
+Если несколько секций `profiles.conf` покрывают один и тот же домен, включается
+автоподбор (`auto_profile=true`):
+
+* первая попытка использует первый подходящий профиль;
+* если клиент повторно открыл соединение к тому же SNI в течение
+  `auto_retry_window_s` и предыдущая попытка не дошла до данных после
+  ClientHello, движок переключается на следующий подходящий профиль;
+* успехом считается любой payload клиента после конца ClientHello (TLS
+  Finished, HTTP, WebSocket). Успешный профиль остаётся текущим.
+
+Пример двух вариантов для Discord:
+
+```ini
+[discord-safe]
+domains = discord.com, discord.gg, gateway.discord.gg
+split_disorder = true
+fake_enabled = false
+seqovl_enabled = false
+
+[discord-aggressive]
+domains = discord.com, discord.gg, gateway.discord.gg
+split_disorder = true
+fake_enabled = true
+fake_sni = www.microsoft.com
+seqovl_enabled = true
+seqovl_bytes = 646
+```
+
+Если профиль один, автоподбор не вмешивается. Ограничение: успех определяется
+по последующему трафику клиента, без отдельного наблюдения ServerHello;
+параллельные соединения к одному SNI могут вызвать лишнюю ротацию. Для
+предсказуемости задавай `auto_retry_window_s` больше типичного интервала
+повторной попытки приложения.

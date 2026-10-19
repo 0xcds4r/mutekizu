@@ -260,6 +260,12 @@ bool load_config(const std::string& path, Config& cfg, std::string& error)
         } else if (key == "profiles_file") {
             if (val.empty()) return bad("profiles_file");
             out.profiles_file = val;
+        } else if (key == "auto_profile") {
+            if (!parse_bool(val, out.auto_profile)) return bad("auto_profile");
+        } else if (key == "auto_retry_window_s") {
+            std::uint64_t v = 0;
+            if (!parse_u64(val, v) || v == 0 || v > 300) return bad("auto_retry_window_s");
+            out.auto_retry_window_s = static_cast<std::uint16_t>(v);
         } else if (key == "log_level") {
             if (val != "error" && val != "warn" && val != "info" && val != "debug")
                 return bad("log_level");

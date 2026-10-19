@@ -336,6 +336,22 @@ Item {
                     }
                     Text { text: qsTr("Должен быть включён хотя бы один стек."); color: Theme.muted; font.family: Theme.font; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
 
+                    Text { text: qsTr("auto_profile"); color: Theme.text; font.family: Theme.font }
+                    Switch {
+                        Material.accent: Theme.accent
+                        checked: backend.draft["auto_profile"] !== false
+                        onToggled: backend.setSetting("auto_profile", checked)
+                    }
+                    Text { text: qsTr("Если несколько профилей в profiles.conf покрывают домен, при неудачной попытке переключаться на следующий. Успех = клиент отправил данные после ClientHello."); color: Theme.muted; font.family: Theme.font; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+
+                    Text { text: qsTr("auto_retry_window_s"); color: Theme.text; font.family: Theme.font }
+                    SpinBox {
+                        from: 1; to: 300
+                        value: backend.draft["auto_retry_window_s"] ?? 10
+                        onValueModified: page.setInt("auto_retry_window_s", value)
+                    }
+                    Text { text: qsTr("Окно, в котором новый коннект к тому же SNI считается повтором после сбоя."); color: Theme.muted; font.family: Theme.font; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+
                     Text { text: qsTr("auto_discover"); color: Theme.text; font.family: Theme.font }
                     Switch {
                         Material.accent: Theme.accent

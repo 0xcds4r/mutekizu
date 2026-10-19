@@ -107,7 +107,7 @@ bool parsePayload(const QByteArray& bytes, Payload& p)
         "queue_num", "fwmark",
         "max_queue_len", "copy_range", "ipv4", "ipv6", "ports", "log_level", "log_sni",
         "max_flows", "flow_buffer", "flow_timeout_s", "domains_file", "profiles_file", "mss_targets_file",
-        "auto_discover", "auto_domains_file"};
+        "auto_discover", "auto_domains_file", "auto_profile", "auto_retry_window_s"};
     for (auto it = p.settings.begin(); it != p.settings.end(); ++it) {
         if (!allowed.contains(it.key()))
             return fail(QStringLiteral("unknown setting: %1").arg(it.key()));
@@ -120,7 +120,8 @@ bool parsePayload(const QByteArray& bytes, Payload& p)
         return true;
     };
     bool split = false, mss = false, v4 = false, v6 = false, logSni = false;
-    bool autoDiscover = true, splitDisorder = false, splitMultidisorder = false;
+    bool autoDiscover = true, autoProfile = true;
+    bool splitDisorder = false, splitMultidisorder = false;
     bool fakeEnabled = false, seqovlEnabled = false, udpFakeEnabled = false;
     if (!requireBool("split_enabled", split) || !requireBool("mss_clamp", mss) ||
         !requireBool("ipv4", v4) || !requireBool("ipv6", v6) ||
@@ -128,6 +129,9 @@ bool parsePayload(const QByteArray& bytes, Payload& p)
         return false;
     if (p.settings.contains("auto_discover") &&
         !requireBool("auto_discover", autoDiscover))
+        return false;
+    if (p.settings.contains("auto_profile") &&
+        !requireBool("auto_profile", autoProfile))
         return false;
     if (p.settings.contains("split_disorder") &&
         !requireBool("split_disorder", splitDisorder))
@@ -150,7 +154,7 @@ bool parsePayload(const QByteArray& bytes, Payload& p)
     int delta = 0, stride = 0, maxs = 0, gap = 0, chunk = 0, mssValue = 0, inspect = 0;
     int queue = 0, maxq = 0, copy = 0, maxFlows = 0, buf = 0, timeout = 0;
     int fakeTtl = 0, fakeRepeats = 0, splitJitter = 0, seqovlBytes = 0, seqovlRepeats = 0;
-    int udpFakeTtl = 0, udpFakeRepeats = 0;
+    int udpFakeTtl = 0, udpFakeRepeats = 0, autoRetryWindow = 0;
     if (!isInt(p.settings.value("split_delta"), 1, 200, delta) ||
         !isInt(p.settings.value("split_stride"), 0, 64, stride) ||
         !isInt(p.settings.value("split_max"), 1, 128, maxs) ||
@@ -173,6 +177,10 @@ bool parsePayload(const QByteArray& bytes, Payload& p)
     seqovlRepeats = 1;
     udpFakeTtl = 4;
     udpFakeRepeats = 5;
+    autoRetryWindow = 10;
+    if (p.settings.contains("auto_retry_window_s") &&
+        !isInt(p.settings.value("auto_retry_window_s"), 1, 300, autoRetryWindow))
+        return fail(QStringLiteral("invalid auto_retry_window_s"));
     if (p.settings.contains("split_jitter_ms") &&
         !isInt(p.settings.value("split_jitter_ms"), 0, 50, splitJitter))
         return fail(QStringLiteral("invalid split_jitter_ms"));
@@ -295,6 +303,8 @@ QString configText(const Payload& p)
     add("flow_buffer", QString::number(s.value("flow_buffer").toInt()));
     add("flow_timeout_s", QString::number(s.value("flow_timeout_s").toInt()));
     add("auto_discover", b(s.value("auto_discover").toBool(true)));
+    add("auto_profile", b(s.value("auto_profile").toBool(true)));
+    add("auto_retry_window_s", QString::number(s.value("auto_retry_window_s").toInt(10)));
     add("auto_domains_file", QStringLiteral("/var/lib/mutekizu/auto-domains.txt"));
     return out;
 }

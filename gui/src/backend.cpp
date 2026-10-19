@@ -110,6 +110,8 @@ QVariantMap Backend::defaults()
     m["flow_buffer"] = 8192;
     m["flow_timeout_s"] = 30;
     m["auto_discover"] = true;
+    m["auto_profile"] = true;
+    m["auto_retry_window_s"] = 10;
     return m;
 }
 
@@ -641,6 +643,8 @@ QString Backend::settingsToConfig(const QVariantMap& s, const QString& domainsPa
     add("flow_buffer", QString::number(s.value("flow_buffer").toInt()));
     add("flow_timeout_s", QString::number(s.value("flow_timeout_s").toInt()));
     add("auto_discover", b(s.value("auto_discover")));
+    add("auto_profile", b(s.value("auto_profile")));
+    add("auto_retry_window_s", QString::number(s.value("auto_retry_window_s").toInt()));
     add("auto_domains_file", QStringLiteral("/var/lib/mutekizu/auto-domains.txt"));
     return out;
 }

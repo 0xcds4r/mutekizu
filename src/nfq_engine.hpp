@@ -89,6 +89,10 @@ private:
         std::vector<std::uint32_t> split_offsets; // relative to base_seq
         bool data_split = false;
         int profile_index = -1;
+        std::string sni;
+        std::uint32_t hello_end_seq = 0;
+        bool hello_done = false;
+        bool success = false;
         std::chrono::steady_clock::time_point last{};
     };
 
@@ -99,8 +103,17 @@ private:
                       const StrategyValues& st, bool data = false);
     int accept(nfq_q_handle* qh, std::uint32_t id);
 
+    struct AutoState {
+        std::size_t index = 0;
+        bool has_attempt = false;
+        bool last_ok = false;
+        std::chrono::steady_clock::time_point last_attempt{};
+    };
     StrategyValues effective_for(int profile_index) const;
     int profile_index_for(const std::string& sni) const;
+    std::vector<int> matching_profiles(const std::string& sni) const;
+    int choose_profile(const std::string& sni, const std::vector<int>& candidates);
+    void mark_profile_success(const std::string& sni);
     void loadAutoDomains();
     bool isAutoTarget(const std::string& sni) const;
     void maybeProbe(const TcpPacket& pkt, const std::string& sni);
@@ -112,6 +125,7 @@ private:
     DomainSet domains_;
     std::vector<Profile> profiles_;
     std::vector<DomainSet> profile_sets_;
+    std::unordered_map<std::string, AutoState> autoStates_;
     Stats stats_{};
     std::unordered_map<FlowKey, Flow, FlowKeyHash> flows_;
     std::uint64_t packet_counter_ = 0;

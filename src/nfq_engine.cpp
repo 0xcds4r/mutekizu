@@ -230,6 +230,39 @@ int NfqEngine::profile_index_for(const std::string& sni) const
     return -1;
 }
 
+std::vector<int> NfqEngine::matching_profiles(const std::string& sni) const
+{
+    std::vector<int> out;
+    for (std::size_t i = 0; i < profile_sets_.size(); ++i)
+        if (profile_sets_[i].matches(sni)) out.push_back(static_cast<int>(i));
+    return out;
+}
+
+int NfqEngine::choose_profile(const std::string& sni,
+                              const std::vector<int>& candidates)
+{
+    if (candidates.empty()) return -1;
+    if (!cfg_.auto_profile || candidates.size() < 2) return candidates.front();
+
+    const auto now = std::chrono::steady_clock::now();
+    if (autoStates_.size() > 4096) autoStates_.clear();
+    AutoState& st = autoStates_[sni];
+    if (st.has_attempt && !st.last_ok &&
+        now - st.last_attempt < std::chrono::seconds(cfg_.auto_retry_window_s)) {
+        st.index = (st.index + 1) % candidates.size();
+    }
+    st.has_attempt = true;
+    st.last_ok = false;
+    st.last_attempt = now;
+    return candidates[st.index % candidates.size()];
+}
+
+void NfqEngine::mark_profile_success(const std::string& sni)
+{
+    auto it = autoStates_.find(sni);
+    if (it != autoStates_.end()) it->second.last_ok = true;
+}
+
 void NfqEngine::request_stop() noexcept { stop_ = true; }
 
 int NfqEngine::callback(nfq_q_handle* qh, nfgenmsg* nfmsg, nfq_data* nfad, void* ctx)
@@ -562,6 +595,11 @@ int NfqEngine::handle(nfq_q_handle* qh, nfq_data* nfad)
     if ((pkt.flags & (kTcpSyn | kTcpFin | kTcpRst)) != 0) return accept(qh, id);
 
     Flow& flow = flow_for(pkt);
+    if (flow.hello_done && !flow.success && !flow.sni.empty() &&
+        static_cast<std::int32_t>(pkt.seq - flow.hello_end_seq) >= 0) {
+        flow.success = true;
+        mark_profile_success(flow.sni);
+    }
     StrategyValues flow_strategy = effective_for(flow.profile_index);
 
     if (flow.data_split && flow_strategy.split_data && pkt.payload_len > 2) {
@@ -613,9 +651,12 @@ int NfqEngine::handle(nfq_q_handle* qh, nfq_data* nfad)
         return accept(qh, id);
     }
 
-    const int profile_index = profile_index_for(info.sni);
+    const std::vector<int> candidates = matching_profiles(info.sni);
+    const int profile_index = candidates.empty()
+                                  ? -1
+                                  : choose_profile(info.sni, candidates);
     const bool target = domains_.matches(info.sni) || isAutoTarget(info.sni) ||
-                        profile_index >= 0;
+                        !candidates.empty();
     if (!target) {
         maybeProbe(pkt, info.sni);
         flow.ignore = true;
@@ -624,6 +665,9 @@ int NfqEngine::handle(nfq_q_handle* qh, nfq_data* nfad)
 
     const StrategyValues st = effective_for(profile_index);
     flow.profile_index = profile_index;
+    flow.sni = info.sni;
+    flow.hello_done = true;
+    flow.hello_end_seq = flow.base_seq + static_cast<std::uint32_t>(info.record_end);
     if (!st.split_enabled) {
         flow.ignore = true;
         return accept(qh, id);

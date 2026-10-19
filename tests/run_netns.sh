@@ -513,7 +513,40 @@ fi
 stop_model
 stop_shield
 
+# ---------------------------------------------------------------- auto profiles
+log "auto-profile: failed candidate rotates on the next attempt"
+cat > "$WORK/auto-profiles.conf" <<EOF
+[bad]
+domains = test.example
+split_enabled = false
+
+[good]
+domains = test.example
+split_enabled = true
+split_disorder = true
+fake_enabled = false
+seqovl_enabled = false
+EOF
+cp "$WORK/config" "$WORK/auto-profile-main.conf"
+printf 'profiles_file=%s\nauto_profile=true\nauto_retry_window_s=10\n' \
+    "$WORK/auto-profiles.conf" >> "$WORK/auto-profile-main.conf"
+start_shield "$WORK/auto-profile-main.conf"
+start_model "" hello
+if run_client 10.0.0.1 test.example 4096 3 | grep -q '^OK'; then
+    fail "auto-profile bad candidate unexpectedly passed"
+else
+    pass "auto-profile first (bad) candidate fails"
+fi
+if run_client 10.0.0.1 test.example 131072 8 | grep -q '^OK'; then
+    pass "auto-profile rotates to the good candidate"
+else
+    fail "auto-profile did not rotate"
+fi
+stop_model
+stop_shield
+
 # ---------------------------------------------------------------- performance
+
 
 
 
