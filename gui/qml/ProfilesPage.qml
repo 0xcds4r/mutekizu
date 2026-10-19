@@ -36,8 +36,25 @@ Item {
             editor.text = currentText()
     }
 
-    onSelectedChanged: syncFields()
-    Component.onCompleted: syncFields()
+    // Called on an explicit profile switch: always replace the editor text,
+    // even if the old TextArea still owns focus. Otherwise the MouseArea click
+    // on the list does not steal focus and the editor keeps the old block.
+    function loadProfile() {
+        if (backend.profileList.length > selected) {
+            profileName.text = backend.profileValue(selected, "name")
+            profileDomains.text = backend.profileValue(selected, "domains")
+            profileInterfaces.text = backend.profileValue(selected, "interfaces")
+            editor.text = currentText()
+        } else {
+            profileName.text = ""
+            profileDomains.text = ""
+            profileInterfaces.text = ""
+            editor.text = ""
+        }
+    }
+
+    onSelectedChanged: loadProfile()
+    Component.onCompleted: loadProfile()
 
     function check() {
         validationText = backend.validateDraft()
@@ -68,7 +85,7 @@ Item {
                 Button {
                     text: qsTr("+")
                     font.family: Theme.font
-                    onClicked: { backend.addProfile(); page.selectLast(); page.syncEditor() }
+                    onClicked: { backend.addProfile(); page.selectLast(); page.loadProfile() }
                 }
                 Button {
                     text: qsTr("Копия")
@@ -77,14 +94,14 @@ Item {
                     onClicked: {
                         backend.duplicateProfile(page.selected)
                         page.selectLast()
-                        page.syncEditor()
+                        page.loadProfile()
                     }
                 }
                 Button {
                     text: qsTr("Удалить")
                     font.family: Theme.font
                     enabled: backend.profileList.length > 0
-                    onClicked: { backend.removeProfile(page.selected); page.syncEditor() }
+                    onClicked: { backend.removeProfile(page.selected); page.loadProfile() }
                 }
             }
 
@@ -162,12 +179,12 @@ Item {
                 Button {
                     text: qsTr("Discord")
                     font.family: Theme.font
-                    onClicked: { backend.addProfileTemplate("discord"); page.selectLast(); page.syncEditor() }
+                    onClicked: { backend.addProfileTemplate("discord"); page.selectLast(); page.loadProfile() }
                 }
                 Button {
                     text: qsTr("YouTube")
                     font.family: Theme.font
-                    onClicked: { backend.addProfileTemplate("youtube"); page.selectLast(); page.syncEditor() }
+                    onClicked: { backend.addProfileTemplate("youtube"); page.selectLast(); page.loadProfile() }
                 }
             }
         }
@@ -289,7 +306,7 @@ Item {
                     text: qsTr("Откатить")
                     font.family: Theme.font
                     enabled: backend.dirty
-                    onClicked: { backend.revertDraft(); page.syncEditor() }
+                    onClicked: { backend.revertDraft(); page.loadProfile() }
                 }
                 Item { Layout.fillWidth: true }
                 Text {
