@@ -1,0 +1,22 @@
+/* Opt-in: passwordless Mutekizu service control and config apply for admins.
+ *
+ * Only members of wheel/sudo (users who can already become root) are
+ * matched, and only two exact actions are allowed:
+ *   - start/stop/restart mutekizu.service via systemd D-Bus
+ *   - run the fixed, root-owned /usr/libexec/mutekizu-config-helper via pkexec
+ * It does not grant a shell, arbitrary units, arbitrary pkexec programs, or
+ * root access to the GUI. Installed only with --polkit-noauth.
+ */
+polkit.addRule(function(action, subject) {
+    if (!subject.local || !subject.active) return;
+    if (!subject.isInGroup("wheel") && !subject.isInGroup("sudo")) return;
+
+    if (action.id === "org.freedesktop.systemd1.manage-units") {
+        if (action.lookup("unit") === "mutekizu.service")
+            return polkit.Result.YES;
+    }
+    if (action.id === "org.freedesktop.policykit.exec") {
+        if (action.lookup("program") === "/usr/libexec/mutekizu-config-helper")
+            return polkit.Result.YES;
+    }
+});

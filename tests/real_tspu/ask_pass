@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# SUDO_ASKPASS helper.
+#
+# It NEVER stores a password: it prompts on the controlling terminal and prints
+# the secret only to sudo's pipe. Run it from an interactive shell:
+#
+#   SUDO_ASKPASS="$PWD/tests/real_tspu/ask_pass" sudo -A \
+#       tests/real_tspu/run_with_tool.sh --pause-zapret --yes
+set -euo pipefail
+
+tty=/dev/tty
+if [ ! -r "$tty" ] || [ ! -w "$tty" ]; then
+    echo "ask_pass: no controlling terminal; run from an interactive shell" >&2
+    exit 1
+fi
+
+printf 'sudo password for %s: ' "${USER:-user}" > "$tty"
+trap 'stty echo < "$tty" 2>/dev/null || true' EXIT
+stty -echo < "$tty" 2>/dev/null || true
+IFS= read -rs password < "$tty" || { printf '\n' > "$tty"; exit 1; }
+printf '\n' > "$tty"
+printf '%s\n' "$password"

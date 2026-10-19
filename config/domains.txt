@@ -1,0 +1,98 @@
+# Mutekizu / mutekizu default SNI targets.
+# Base: /opt/zapret/hostlists/list-general-user.txt;
+# plus YouTube/Google video and page domains (needed for video CDN)
+# plus Discord desktop/gateway/CDN domains from list-general.txt.
+# Each entry matches the exact domain and its subdomains. The engine does not
+# support wildcards or automatic IDN normalization; punycode can be listed.
+#
+# Scope notes: this list controls TLS ClientHello SNI splitting only. It does
+# not fix DNS poisoning, IP-level blocks, QUIC or Telegram MTProto (the
+# desktop app talks to DCs without SNI). Availability depends on the filter.
+#
+instagram.com
+cdninstagram.com
+facebook.com
+fbcdn.net
+torproject.org
+torproject.net
+threads.com
+fbsbx.com
+protonmail.com
+proton.me
+mail.proton.me
+account.proton.me
+mobilization.online
+t.me
+telegram.me
+telegra.ph
+web.telegram.org
+pluto.web.telegram.org
+venus.web.telegram.org
+aurora.web.telegram.org
+vesta.web.telegram.org
+flora.web.telegram.org
+api.telegram.org
+core.telegram.org
+updates.telegram.org
+desktop.telegram.org
+cdn.telegram.org
+cdn1.telegram.org
+cdn2.telegram.org
+cdn3.telegram.org
+cdn4.telegram.org
+cdn5.telegram.org
+cdn6.telegram.org
+api-dashboard.search.brave.com
+x.com
+twitter.com
+t.co
+twimg.com
+twttr.com
+twttr.net
+tweetdeck.com
+twittercommunity.com
+periscope.tv
+pscp.tv
+youtube.com
+www.youtube.com
+m.youtube.com
+youtu.be
+googlevideo.com
+youtube-nocookie.com
+youtube.googleapis.com
+youtubei.googleapis.com
+youtube-ui.l.google.com
+wide-youtube.l.google.com
+youtubekids.com
+youtubeembeddedplayer.googleapis.com
+ytimg.com
+ytimg.l.google.com
+yt-video-upload.l.google.com
+jnn-pa.googleapis.com
+yt3.ggpht.com
+yt4.ggpht.com
+yt3.googleusercontent.com
+dis.gd
+discord-attachments-uploads-prd.storage.googleapis.com
+discord.app
+discord.co
+discord.com
+discord.design
+discord.dev
+discord.gift
+discord.gifts
+discord.gg
+discord.media
+discord.new
+discord.store
+discord.status
+discord-activities.com
+discordactivities.com
+discordapp.com
+discordapp.net
+discordcdn.com
+discordmerch.com
+discordpartygames.com
+discordsays.com
+discordsez.com
+discordstatus.com

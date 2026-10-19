@@ -1,0 +1,54 @@
+[Unit]
+Description=mutekizu local TLS ClientHello splitter
+Documentation=file:/usr/local/share/doc/mutekizu/README.md
+# Firewall-like unit: start early, but never take the network down if it fails.
+After=network-pre.target
+Wants=network-pre.target
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=simple
+ExecStartPre=/usr/local/bin/mutekizu --config /etc/mutekizu/mutekizu.conf check-config
+ExecStart=/usr/local/bin/mutekizu run --config /etc/mutekizu/mutekizu.conf
+TimeoutStopSec=10s
+# Safety net after a crash/SIGKILL: remove only our own table. Failure is ignored.
+ExecStopPost=-/usr/local/bin/mutekizu --config /etc/mutekizu/mutekizu.conf rules remove
+Restart=always
+RestartSec=2s
+
+User=mutekizu
+Group=mutekizu
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+NoNewPrivileges=yes
+
+# Hardening. The daemon needs: netlink sockets, raw AF_INET/AF_INET6 sockets,
+# /run/mutekizu for the pidfile and the generated ruleset, and exec of nft.
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_NETLINK AF_UNIX
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+RuntimeDirectory=mutekizu
+RuntimeDirectoryMode=0750
+StateDirectory=mutekizu
+StateDirectoryMode=0700
+MemoryMax=128M
+TasksMax=32
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

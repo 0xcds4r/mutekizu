@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Mutekizu
+GenericName=Local anti-DPI configuration
+Comment=Mutekizu — configure the local mutekizu TCP/TLS splitter and MSS clamp
+Exec=mutekizu-gui
+Icon=mutekizu
+Terminal=false
+Categories=Network;Settings;Security;
+Keywords=DPI;TLS;SNI;network;
+StartupWMClass=mutekizu-gui

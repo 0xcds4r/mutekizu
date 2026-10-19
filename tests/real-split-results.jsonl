@@ -1,0 +1,15 @@
+{"target": "example.com", "ip": "8.47.69.5", "mode": "baseline", "ok": false, "error": "no SNI in ClientHello"}
+{"target": "example.com", "ip": "8.47.69.5", "mode": "split", "ok": false, "error": "no SNI in ClientHello"}
+{"target": "example.com", "ip": "8.47.69.5", "mode": "multi", "ok": false, "error": "no SNI in ClientHello"}
+{"target": "facebook.com", "ip": "157.240.205.35", "mode": "baseline", "ok": false, "error": "no SNI in ClientHello"}
+{"target": "facebook.com", "ip": "157.240.205.35", "mode": "split", "ok": false, "error": "no SNI in ClientHello"}
+{"target": "facebook.com", "ip": "157.240.205.35", "mode": "multi", "ok": false, "error": "no SNI in ClientHello"}
+{"target": "x.com", "ip": "162.159.140.229", "mode": "baseline", "ok": false, "error": "no SNI in ClientHello"}
+{"target": "x.com", "ip": "162.159.140.229", "mode": "split", "ok": false, "error": "no SNI in ClientHello"}
+{"target": "x.com", "ip": "162.159.140.229", "mode": "multi", "ok": false, "error": "no SNI in ClientHello"}
+{"target": "discord.com", "ip": "162.159.137.232", "mode": "baseline", "ok": false, "error": "no SNI in ClientHello"}
+{"target": "discord.com", "ip": "162.159.137.232", "mode": "split", "ok": false, "error": "no SNI in ClientHello"}
+{"target": "discord.com", "ip": "162.159.137.232", "mode": "multi", "ok": false, "error": "no SNI in ClientHello"}
+{"target": "www.youtube.com", "ip": "142.251.150.4", "mode": "baseline", "ok": false, "error": "no SNI in ClientHello"}
+{"target": "www.youtube.com", "ip": "142.251.150.4", "mode": "split", "ok": false, "error": "no SNI in ClientHello"}
+{"target": "www.youtube.com", "ip": "142.251.150.4", "mode": "multi", "ok": false, "error": "no SNI in ClientHello"}
