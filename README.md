@@ -401,6 +401,8 @@ cmake --build build -j"$(nproc)"
 * `mss=1200` (размер куска, не MSS-clamp), `inspect_packets=10`;
 * `ports=443,8080,80,83`, IPv4 only, `queue_num=2000`,
   `fwmark=0x44495054`;
+* `profiles_file=/etc/mutekizu/profiles.conf` — необязательные
+  per-domain профили (раздел 14);
 * `log_level=info`, `log_sni=false`;
 * домены — 87 записей: 44 из `/opt/zapret/hostlists/list-general-user.txt`
   (Instagram/Facebook/Threads, Tor, Proton, Telegram web/CDN, Brave, X/Twitter),
@@ -521,3 +523,43 @@ sudo ~/mutekizu/scripts/install-all.sh --polkit-noauth
 По сравнению с zapret пока нет fake QUIC, вариантов TCP MD5/TTL-фулинга и
 полноценного движка правил по hostlist. Mutekizu остаётся инструментом для
 TCP ClientHello плюс UDP fake для RTC.
+
+---
+
+## 14. Профили по доменам
+
+Глобальные значения остаются в `mutekizu.conf`, а необязательный
+`/etc/mutekizu/profiles.conf` позволяет переопределить стратегию для
+конкретных доменов:
+
+```ini
+[discord]
+domains = discord.com, discord.gg, gateway.discord.gg
+split_disorder = true
+fake_enabled = true
+fake_sni = www.microsoft.com
+seqovl_enabled = true
+seqovl_bytes = 646
+
+[youtube]
+domains = youtube.com, googlevideo.com, ytimg.com
+split_delta = 4
+split_stride = 4
+split_disorder = false
+fake_enabled = false
+```
+
+Правила:
+
+* секции читаются сверху вниз, побеждает **первое** совпадение домена
+  (включая поддомены);
+* в профиле можно задать только те ключи, которые отличаются от глобальных;
+* профиль может включить домен, которого нет в `domains.txt`;
+* поддерживаются все TCP-ключи split/fake/seqovl, включая
+  `split_multidisorder`, `split_data`, `split_jitter_ms`;
+* наследования профилей пока нет; общие значения берутся из `mutekizu.conf`;
+* изменения профилей применяются после restart службы.
+
+Путь задаётся ключом `profiles_file=` (по умолчанию
+`/etc/mutekizu/profiles.conf`). Файл создаётся установщиком с примерами в
+комментариях; если его нет, работают глобальные настройки.

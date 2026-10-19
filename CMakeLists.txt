@@ -13,6 +13,7 @@ add_library(dpi_core STATIC
     src/log.cpp
     src/tls_clienthello.cpp
     src/tls_probe.cpp
+    src/profiles.cpp
     src/strategy.cpp
     src/netpacket.cpp
     src/nft_rules.cpp

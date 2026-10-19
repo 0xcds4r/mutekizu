@@ -164,7 +164,70 @@ bool NfqEngine::init(std::string& error)
         return false;
     }
     loadAutoDomains();
+    if (!load_profiles(cfg_.profiles_file, profiles_, error)) return false;
+    profile_sets_.reserve(profiles_.size());
+    for (const auto& prof : profiles_) {
+        DomainSet set;
+        set.domains = prof.domains;
+        set.normalize();
+        profile_sets_.push_back(std::move(set));
+    }
+    if (!profiles_.empty())
+        log_msg(LogLevel::Info, "profiles: loaded %zu domain profile(s)", profiles_.size());
     return true;
+}
+
+NfqEngine::StrategyValues NfqEngine::effective_for(int profile_index) const
+{
+    StrategyValues st;
+    st.split_enabled = cfg_.split_enabled;
+    st.split_delta = cfg_.split_delta;
+    st.split_stride = cfg_.split_stride;
+    st.split_max = cfg_.split_max;
+    st.split_gap_ms = cfg_.split_gap_ms;
+    st.split_disorder = cfg_.split_disorder;
+    st.split_multidisorder = cfg_.split_multidisorder;
+    st.split_data = cfg_.split_data;
+    st.split_data_pos = cfg_.split_data_pos;
+    st.split_jitter_ms = cfg_.split_jitter_ms;
+    st.fake_enabled = cfg_.fake_enabled;
+    st.fake_ttl = cfg_.fake_ttl;
+    st.fake_repeats = cfg_.fake_repeats;
+    st.fake_sni = cfg_.fake_sni;
+    st.seqovl_enabled = cfg_.seqovl_enabled;
+    st.seqovl_bytes = cfg_.seqovl_bytes;
+    st.seqovl_repeats = cfg_.seqovl_repeats;
+
+    if (profile_index >= 0 &&
+        static_cast<std::size_t>(profile_index) < profiles_.size()) {
+        const Profile& p = profiles_[static_cast<std::size_t>(profile_index)];
+        auto set = [](auto& dst, const auto& src) { if (src) dst = *src; };
+        set(st.split_enabled, p.split_enabled);
+        set(st.split_delta, p.split_delta);
+        set(st.split_stride, p.split_stride);
+        set(st.split_max, p.split_max);
+        set(st.split_gap_ms, p.split_gap_ms);
+        set(st.split_disorder, p.split_disorder);
+        set(st.split_multidisorder, p.split_multidisorder);
+        set(st.split_data, p.split_data);
+        set(st.split_data_pos, p.split_data_pos);
+        set(st.split_jitter_ms, p.split_jitter_ms);
+        set(st.fake_enabled, p.fake_enabled);
+        set(st.fake_ttl, p.fake_ttl);
+        set(st.fake_repeats, p.fake_repeats);
+        set(st.fake_sni, p.fake_sni);
+        set(st.seqovl_enabled, p.seqovl_enabled);
+        set(st.seqovl_bytes, p.seqovl_bytes);
+        set(st.seqovl_repeats, p.seqovl_repeats);
+    }
+    return st;
+}
+
+int NfqEngine::profile_index_for(const std::string& sni) const
+{
+    for (std::size_t i = 0; i < profile_sets_.size(); ++i)
+        if (profile_sets_[i].matches(sni)) return static_cast<int>(i);
+    return -1;
 }
 
 void NfqEngine::request_stop() noexcept { stop_ = true; }
@@ -381,17 +444,18 @@ void NfqEngine::runProbe(int family, std::array<std::uint8_t, 16> dst,
 }
 
 bool NfqEngine::handle_split(nfq_q_handle* qh, std::uint32_t id, const TcpPacket& pkt,
-                             const std::vector<std::size_t>& boundaries, bool data)
+                             const std::vector<std::size_t>& boundaries,
+                             const StrategyValues& st, bool data)
 {
     const int fd = pkt.is_ipv4() ? raw4_ : raw6_;
 
-    if (!data && cfg_.fake_enabled && !cfg_.fake_sni.empty()) {
-        const auto fake = build_probe_client_hello(cfg_.fake_sni);
+    if (!data && st.fake_enabled && !st.fake_sni.empty()) {
+        const auto fake = build_probe_client_hello(st.fake_sni);
         std::uint16_t ip_id = static_cast<std::uint16_t>(pkt.ip_id + 0x4000);
-        for (std::uint16_t i = 0; i < cfg_.fake_repeats; ++i) {
+        for (std::uint16_t i = 0; i < st.fake_repeats; ++i) {
             std::string ferr;
             if (!send_fake_segment(fd, pkt, pkt.seq, fake.data(), fake.size(),
-                                   static_cast<std::uint8_t>(cfg_.fake_ttl), ip_id, ferr)) {
+                                   static_cast<std::uint8_t>(st.fake_ttl), ip_id, ferr)) {
                 log_msg(LogLevel::Debug, "fake send failed: %s", ferr.c_str());
                 break;
             }
@@ -400,16 +464,16 @@ bool NfqEngine::handle_split(nfq_q_handle* qh, std::uint32_t id, const TcpPacket
         }
     }
 
-    if (!data && cfg_.seqovl_enabled) {
-        const auto fake = build_probe_client_hello(cfg_.fake_sni);
-        std::vector<std::uint8_t> overlap(cfg_.seqovl_bytes, 0);
+    if (!data && st.seqovl_enabled) {
+        const auto fake = build_probe_client_hello(st.fake_sni);
+        std::vector<std::uint8_t> overlap(st.seqovl_bytes, 0);
         overlap.insert(overlap.end(), fake.begin(), fake.end());
         std::uint16_t ip_id = static_cast<std::uint16_t>(pkt.ip_id + 0x6000);
-        for (std::uint16_t i = 0; i < cfg_.seqovl_repeats; ++i) {
+        for (std::uint16_t i = 0; i < st.seqovl_repeats; ++i) {
             std::string oerr;
-            if (!send_fake_segment(fd, pkt, pkt.seq - cfg_.seqovl_bytes,
+            if (!send_fake_segment(fd, pkt, pkt.seq - st.seqovl_bytes,
                                    overlap.data(), overlap.size(),
-                                   static_cast<std::uint8_t>(cfg_.fake_ttl), ip_id, oerr)) {
+                                   static_cast<std::uint8_t>(st.fake_ttl), ip_id, oerr)) {
                 log_msg(LogLevel::Debug, "seqovl send failed: %s", oerr.c_str());
                 break;
             }
@@ -420,10 +484,10 @@ bool NfqEngine::handle_split(nfq_q_handle* qh, std::uint32_t id, const TcpPacket
 
     SendOptions opts;
     opts.max_payload_per_segment = cfg_.mss;
-    opts.gap_ms = cfg_.split_gap_ms;
-    opts.disorder = cfg_.split_disorder;
-    opts.multidisorder = cfg_.split_multidisorder;
-    opts.jitter_ms = cfg_.split_jitter_ms;
+    opts.gap_ms = st.split_gap_ms;
+    opts.disorder = st.split_disorder;
+    opts.multidisorder = st.split_multidisorder;
+    opts.jitter_ms = st.split_jitter_ms;
     auto res = send_split_segments(fd, pkt, boundaries, opts);
     if (!res.ok) {
         ++stats_.split_send_errors;
@@ -436,9 +500,9 @@ bool NfqEngine::handle_split(nfq_q_handle* qh, std::uint32_t id, const TcpPacket
     log_msg(LogLevel::Debug,
             "split ClientHello: %zu segment(s), %zu boundary(ies), disorder=%d multi=%d "
             "fake=%d seqovl=%d jitter=%u",
-            res.segments, boundaries.size(), cfg_.split_disorder ? 1 : 0,
-            cfg_.split_multidisorder ? 1 : 0, cfg_.fake_enabled ? 1 : 0,
-            cfg_.seqovl_enabled ? 1 : 0, static_cast<unsigned>(cfg_.split_jitter_ms));
+            res.segments, boundaries.size(), st.split_disorder ? 1 : 0,
+            st.split_multidisorder ? 1 : 0, st.fake_enabled ? 1 : 0,
+            st.seqovl_enabled ? 1 : 0, static_cast<unsigned>(st.split_jitter_ms));
     return nfq_set_verdict(qh, id, NF_DROP, 0, nullptr) == 0;
 }
 
@@ -498,11 +562,12 @@ int NfqEngine::handle(nfq_q_handle* qh, nfq_data* nfad)
     if ((pkt.flags & (kTcpSyn | kTcpFin | kTcpRst)) != 0) return accept(qh, id);
 
     Flow& flow = flow_for(pkt);
+    StrategyValues flow_strategy = effective_for(flow.profile_index);
 
-    if (flow.data_split && cfg_.split_data && pkt.payload_len > 2) {
+    if (flow.data_split && flow_strategy.split_data && pkt.payload_len > 2) {
         const std::size_t pos = std::min<std::size_t>(
-            std::max<std::size_t>(1, cfg_.split_data_pos), pkt.payload_len - 1);
-        return handle_split(qh, id, pkt, {pos}, true);
+            std::max<std::size_t>(1, flow_strategy.split_data_pos), pkt.payload_len - 1);
+        return handle_split(qh, id, pkt, {pos}, flow_strategy, true);
     }
 
     // Retransmission / overlap: never grow the buffer twice, but re-split the
@@ -514,7 +579,7 @@ int NfqEngine::handle(nfq_q_handle* qh, nfq_data* nfad)
             const std::uint32_t off = (flow.base_seq + b) - pkt.seq;
             if (off > 0 && off < pkt.payload_len) in_packet.push_back(off);
         }
-        if (!in_packet.empty()) return handle_split(qh, id, pkt, in_packet);
+        if (!in_packet.empty()) return handle_split(qh, id, pkt, in_packet, flow_strategy);
     }
     if (flow.ignore) return accept(qh, id);
 
@@ -548,14 +613,23 @@ int NfqEngine::handle(nfq_q_handle* qh, nfq_data* nfad)
         return accept(qh, id);
     }
 
-    const bool target = domains_.matches(info.sni) || isAutoTarget(info.sni);
+    const int profile_index = profile_index_for(info.sni);
+    const bool target = domains_.matches(info.sni) || isAutoTarget(info.sni) ||
+                        profile_index >= 0;
     if (!target) {
         maybeProbe(pkt, info.sni);
         flow.ignore = true;
         return accept(qh, id);
     }
 
-    const StrategyConfig sc{cfg_.split_delta, cfg_.split_stride, cfg_.split_max};
+    const StrategyValues st = effective_for(profile_index);
+    flow.profile_index = profile_index;
+    if (!st.split_enabled) {
+        flow.ignore = true;
+        return accept(qh, id);
+    }
+
+    const StrategyConfig sc{st.split_delta, st.split_stride, st.split_max};
     const Decision d = decide_for_target(info, sc);
     if (d.action != Decision::Action::Split) {
         flow.ignore = true;
@@ -566,7 +640,7 @@ int NfqEngine::handle(nfq_q_handle* qh, nfq_data* nfad)
         log_msg(LogLevel::Info, "target ClientHello for %s", info.sni.c_str());
 
     flow.split_offsets.clear();
-    flow.data_split = cfg_.split_data;
+    flow.data_split = st.split_data;
     std::vector<std::size_t> in_packet;
     for (std::size_t b : d.boundaries) {
         flow.split_offsets.push_back(static_cast<std::uint32_t>(b));
@@ -577,7 +651,7 @@ int NfqEngine::handle(nfq_q_handle* qh, nfq_data* nfad)
             "decision: base_seq=%u pkt_seq=%u payload=%zu sni_off=%zu boundaries=%zu in_packet=%zu",
             flow.base_seq, pkt.seq, pkt.payload_len, info.sni_offset,
             d.boundaries.size(), in_packet.size());
-    if (!in_packet.empty()) return handle_split(qh, id, pkt, in_packet);
+    if (!in_packet.empty()) return handle_split(qh, id, pkt, in_packet, st);
 
     // Boundaries are in later segments; they will be handled when those
     // segments are queued (nft keeps the first N original-direction packets).

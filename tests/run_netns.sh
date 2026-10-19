@@ -490,7 +490,31 @@ fi
 stop_model
 stop_shield
 
+# ---------------------------------------------------------------- profiles
+log "profiles: per-domain override is applied"
+cat > "$WORK/profiles.conf" <<EOF
+[test-profile]
+domains = test.example
+split_delta = 1
+split_stride = 0
+split_disorder = true
+fake_enabled = false
+seqovl_enabled = false
+EOF
+cp "$WORK/config" "$WORK/profile-main.conf"
+printf 'profiles_file=%s\n' "$WORK/profiles.conf" >> "$WORK/profile-main.conf"
+start_shield "$WORK/profile-main.conf"
+start_model "" hello
+if run_client 10.0.0.1 test.example 131072 8 | grep -q '^OK'; then
+    pass "profile override keeps TLS integrity"
+else
+    fail "profile override failed TLS integrity"
+fi
+stop_model
+stop_shield
+
 # ---------------------------------------------------------------- performance
+
 
 
 log "performance: 10 sequential connections x 64 KiB"

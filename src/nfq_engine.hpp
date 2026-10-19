@@ -2,6 +2,8 @@
 
 #include "config.hpp"
 #include "netpacket.hpp"
+#include "profiles.hpp"
+#include "strategy.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -60,6 +62,25 @@ private:
     struct FlowKeyHash {
         std::size_t operator()(const FlowKey& k) const noexcept;
     };
+    struct StrategyValues {
+        bool split_enabled = true;
+        std::uint16_t split_delta = 4;
+        std::uint16_t split_stride = 4;
+        std::uint16_t split_max = 64;
+        std::uint16_t split_gap_ms = 0;
+        bool split_disorder = false;
+        bool split_multidisorder = false;
+        bool split_data = false;
+        std::uint16_t split_data_pos = 1;
+        std::uint16_t split_jitter_ms = 0;
+        bool fake_enabled = false;
+        std::uint16_t fake_ttl = 3;
+        std::uint16_t fake_repeats = 3;
+        std::string fake_sni;
+        bool seqovl_enabled = false;
+        std::uint16_t seqovl_bytes = 664;
+        std::uint16_t seqovl_repeats = 1;
+    };
     struct Flow {
         std::uint32_t base_seq = 0;
         std::uint32_t next_seq = 0;
@@ -67,15 +88,19 @@ private:
         bool ignore = false;
         std::vector<std::uint32_t> split_offsets; // relative to base_seq
         bool data_split = false;
+        int profile_index = -1;
         std::chrono::steady_clock::time_point last{};
     };
 
     Flow& flow_for(const TcpPacket& p);
     void prune_flows();
     bool handle_split(nfq_q_handle* qh, std::uint32_t id, const TcpPacket& pkt,
-                      const std::vector<std::size_t>& boundaries, bool data = false);
+                      const std::vector<std::size_t>& boundaries,
+                      const StrategyValues& st, bool data = false);
     int accept(nfq_q_handle* qh, std::uint32_t id);
 
+    StrategyValues effective_for(int profile_index) const;
+    int profile_index_for(const std::string& sni) const;
     void loadAutoDomains();
     bool isAutoTarget(const std::string& sni) const;
     void maybeProbe(const TcpPacket& pkt, const std::string& sni);
@@ -85,6 +110,8 @@ private:
 
     Config cfg_;
     DomainSet domains_;
+    std::vector<Profile> profiles_;
+    std::vector<DomainSet> profile_sets_;
     Stats stats_{};
     std::unordered_map<FlowKey, Flow, FlowKeyHash> flows_;
     std::uint64_t packet_counter_ = 0;

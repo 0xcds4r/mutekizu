@@ -257,6 +257,9 @@ bool load_config(const std::string& path, Config& cfg, std::string& error)
         } else if (key == "domains_file") {
             if (val.empty()) return bad("domains_file");
             out.domains_file = val;
+        } else if (key == "profiles_file") {
+            if (val.empty()) return bad("profiles_file");
+            out.profiles_file = val;
         } else if (key == "log_level") {
             if (val != "error" && val != "warn" && val != "info" && val != "debug")
                 return bad("log_level");

@@ -50,6 +50,12 @@ if [ -f "$SYSCONFDIR/mutekizu/domains.txt" ] && [ "$FORCE" != 1 ]; then
 else
     install -m 0644 "$ROOT/config/domains.txt" "$SYSCONFDIR/mutekizu/domains.txt"
 fi
+if [ -f "$SYSCONFDIR/mutekizu/profiles.conf" ] && [ "$FORCE" != 1 ]; then
+    echo "keeping existing $SYSCONFDIR/mutekizu/profiles.conf (example: .new)"
+    install -m 0644 "$ROOT/config/profiles.conf" "$SYSCONFDIR/mutekizu/profiles.conf.new"
+else
+    install -m 0644 "$ROOT/config/profiles.conf" "$SYSCONFDIR/mutekizu/profiles.conf"
+fi
 if [ -f "$SYSCONFDIR/mutekizu/mss_targets.txt" ] && [ "$FORCE" != 1 ]; then
     echo "keeping existing $SYSCONFDIR/mutekizu/mss_targets.txt (example: .new)"
     install -m 0644 "$ROOT/config/mss_targets.txt" "$SYSCONFDIR/mutekizu/mss_targets.txt.new"

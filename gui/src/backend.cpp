@@ -633,6 +633,7 @@ QString Backend::settingsToConfig(const QVariantMap& s, const QString& domainsPa
     add("ipv6", b(s.value("ipv6")));
     add("ports", s.value("ports").toString());
     add("domains_file", domainsPath);
+    add("profiles_file", QStringLiteral("/etc/mutekizu/profiles.conf"));
     add("mss_targets_file", targetsPath);
     add("log_level", s.value("log_level").toString());
     add("log_sni", b(s.value("log_sni")));

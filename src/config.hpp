@@ -46,6 +46,7 @@ struct Config {
     bool enable_ipv6 = true;
     std::vector<std::uint16_t> ports{443};
     std::string domains_file = "/etc/mutekizu/domains.txt";
+    std::string profiles_file = "/etc/mutekizu/profiles.conf";
     std::string log_level = "info";
     bool log_sni = false;
 

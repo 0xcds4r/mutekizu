@@ -1,5 +1,6 @@
 // Small unit tests for the TLS parser and the strategy decision.
 #include "config.hpp"
+#include "profiles.hpp"
 #include "strategy.hpp"
 #include "tls_clienthello.hpp"
 #include "tls_probe.hpp"
@@ -82,6 +83,32 @@ std::vector<std::uint8_t> make_client_hello(const std::string& host,
 
 int main()
 {
+    {
+        const std::string path = "/tmp/mutekizu-unit-profiles-" + std::to_string(::getpid());
+        {
+            std::ofstream f(path);
+            f << "[discord]\n"
+                 "domains = discord.com, gateway.discord.gg\n"
+                 "split_delta = 6\n"
+                 "split_disorder = true\n"
+                 "fake_enabled = true\n"
+                 "fake_sni = www.microsoft.com\n"
+                 "seqovl_enabled = true\n"
+                 "seqovl_bytes = 646\n"
+                 "[youtube]\n"
+                 "domains = youtube.com, googlevideo.com\n"
+                 "split_stride = 0\n";
+        }
+        std::vector<dpi::Profile> profiles;
+        std::string perr;
+        const bool loaded = dpi::load_profiles(path, profiles, perr);
+        check(loaded && profiles.size() == 2 && profiles[0].name == "discord" &&
+              profiles[0].domains.size() == 2 && profiles[0].split_delta == 6 &&
+              profiles[0].fake_enabled == true && profiles[0].seqovl_bytes == 646 &&
+              profiles[1].split_stride == 0,
+              "domain profiles parse");
+        std::remove(path.c_str());
+    }
     {
         const std::string path = "/tmp/mutekizu-unit-config-" + std::to_string(::getpid());
         {

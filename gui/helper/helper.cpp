@@ -106,7 +106,7 @@ bool parsePayload(const QByteArray& bytes, Payload& p)
         "udp_fake_repeats", "mss", "mss_value", "inspect_packets",
         "queue_num", "fwmark",
         "max_queue_len", "copy_range", "ipv4", "ipv6", "ports", "log_level", "log_sni",
-        "max_flows", "flow_buffer", "flow_timeout_s", "domains_file", "mss_targets_file",
+        "max_flows", "flow_buffer", "flow_timeout_s", "domains_file", "profiles_file", "mss_targets_file",
         "auto_discover", "auto_domains_file"};
     for (auto it = p.settings.begin(); it != p.settings.end(); ++it) {
         if (!allowed.contains(it.key()))
@@ -244,6 +244,7 @@ bool parsePayload(const QByteArray& bytes, Payload& p)
 
     // The helper owns the paths; any supplied path is ignored.
     p.settings["domains_file"] = QStringLiteral("/etc/mutekizu/domains.txt");
+    p.settings["profiles_file"] = QStringLiteral("/etc/mutekizu/profiles.conf");
     p.settings["mss_targets_file"] = QStringLiteral("/etc/mutekizu/mss_targets.txt");
     p.settings["auto_domains_file"] = QStringLiteral("/var/lib/mutekizu/auto-domains.txt");
     return true;
@@ -286,6 +287,7 @@ QString configText(const Payload& p)
     add("ipv6", b(s.value("ipv6").toBool()));
     add("ports", s.value("ports").toString());
     add("domains_file", QStringLiteral("/etc/mutekizu/domains.txt"));
+    add("profiles_file", QStringLiteral("/etc/mutekizu/profiles.conf"));
     add("mss_targets_file", QStringLiteral("/etc/mutekizu/mss_targets.txt"));
     add("log_level", s.value("log_level").toString());
     add("log_sni", b(s.value("log_sni").toBool()));
