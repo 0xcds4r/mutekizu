@@ -2,7 +2,7 @@
 Type=Application
 Name=Mutekizu
 Comment=Mutekizu anti-DPI status and settings
-Exec=mutekizu-gui
+Exec=mutekizu-gui --background
 Icon=mutekizu
 Terminal=false
 X-GNOME-Autostart-enabled=true

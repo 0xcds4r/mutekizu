@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Network Quick Qml DBus QuickControls2)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network Quick Qml DBus QuickControls2)
 
 qt_standard_project_setup()
 qt_policy(SET QTP0001 NEW)
@@ -33,7 +33,7 @@ qt_add_qml_module(mutekizu-gui
 )
 
 target_link_libraries(mutekizu-gui PRIVATE
-    Qt6::Core Qt6::Gui Qt6::Network Qt6::Quick Qt6::Qml Qt6::DBus Qt6::QuickControls2
+    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Quick Qt6::Qml Qt6::DBus Qt6::QuickControls2
 )
 target_compile_definitions(mutekizu-gui PRIVATE
     MUTEKIZU_VERSION="${PROJECT_VERSION}"

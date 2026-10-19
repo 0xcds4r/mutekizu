@@ -1,12 +1,17 @@
 #include "backend.hpp"
 #include "branding.hpp"
 
+#include <QAction>
+#include <QApplication>
 #include <QCommandLineParser>
 #include <QDir>
 #include <QEventLoop>
 #include <QFileInfo>
-#include <QGuiApplication>
 #include <QIcon>
+#include <QLocalServer>
+#include <QLocalSocket>
+#include <QMenu>
+#include <QSystemTrayIcon>
 #include <QImage>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -16,6 +21,8 @@
 
 #include <cstdio>
 #include <functional>
+#include <memory>
+#include <unistd.h>
 
 namespace {
 
@@ -124,12 +131,12 @@ int selfTest()
 
 int main(int argc, char** argv)
 {
-    QGuiApplication app(argc, argv);
-    QGuiApplication::setApplicationName(QStringLiteral("mutekizu-gui"));
-    QGuiApplication::setOrganizationName(QStringLiteral("mutekizu"));
-    QGuiApplication::setApplicationDisplayName(QString::fromUtf8(kDisplayName));
-    QGuiApplication::setDesktopFileName(QStringLiteral("mutekizu"));
-    QGuiApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("mutekizu")));
+    QApplication app(argc, argv);
+    QApplication::setApplicationName(QStringLiteral("mutekizu-gui"));
+    QApplication::setOrganizationName(QStringLiteral("mutekizu"));
+    QApplication::setApplicationDisplayName(QString::fromUtf8(kDisplayName));
+    QApplication::setDesktopFileName(QStringLiteral("mutekizu"));
+    QApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("mutekizu")));
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("Mutekizu desktop GUI"));
@@ -145,6 +152,10 @@ int main(int argc, char** argv)
                       QStringLiteral("Start the mock service before showing/screenshotting.")});
     parser.addOption({QStringLiteral("theme"), QStringLiteral("system, dark or light."),
                       QStringLiteral("theme"), QStringLiteral("system")});
+    parser.addOption({QStringLiteral("background"),
+                      QStringLiteral("Start hidden; relaunch the desktop entry to show.")});
+    parser.addOption({QStringLiteral("quit"),
+                      QStringLiteral("Ask the running GUI instance to quit.")});
     parser.addOption({QStringLiteral("width"), QStringLiteral("Window width."),
                       QStringLiteral("px"), QStringLiteral("1220")});
     parser.addOption({QStringLiteral("height"), QStringLiteral("Window height."),
@@ -168,8 +179,30 @@ int main(int argc, char** argv)
         return 0;
     }
 
+    // One GUI instance is enough: a second desktop launch asks the running one
+    // to show its window instead of creating a duplicate tray/app process.
+    const bool interactive = !parser.isSet("screenshot") &&
+                             !parser.isSet("self-test") &&
+                             !parser.isSet("probe-real");
+    const QString serverName = QStringLiteral("mutekizu-gui-%1").arg(static_cast<qulonglong>(getuid()));
+    if (interactive) {
+        QLocalSocket probe;
+        probe.connectToServer(serverName);
+        if (probe.waitForConnected(250)) {
+            probe.write(parser.isSet("quit") ? "quit" : "show");
+            probe.waitForBytesWritten(250);
+            return 0;
+        }
+    }
+    if (parser.isSet("quit")) return 0;
+
+    QLocalServer::removeServer(serverName);
+    QLocalServer server;
+    if (interactive) (void)server.listen(serverName);
+
     QQuickStyle::setStyle(QStringLiteral("Material"));
 
+    const bool trayAvailable = QSystemTrayIcon::isSystemTrayAvailable();
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
     engine.rootContext()->setContextProperty(QStringLiteral("brandName"), backend.displayName());
@@ -184,13 +217,70 @@ int main(int argc, char** argv)
                                              parser.value("width").toInt());
     engine.rootContext()->setContextProperty(QStringLiteral("initialHeight"),
                                              parser.value("height").toInt());
+    engine.rootContext()->setContextProperty(QStringLiteral("trayAvailable"),
+                                             trayAvailable);
     engine.loadFromModule("Mutekizu", "Main");
     if (engine.rootObjects().isEmpty()) return 1;
 
+    auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().first());
+    if (!window) return 2;
+
+    auto showWindow = [window] {
+        window->show();
+        window->raise();
+        window->requestActivate();
+    };
+
+    if (interactive) {
+        QObject::connect(&server, &QLocalServer::newConnection, &app, [&server, &app, showWindow] {
+            while (QLocalSocket* c = server.nextPendingConnection()) {
+                auto handled = std::make_shared<bool>(false);
+                auto handle = [c, showWindow, &app, handled] {
+                    if (*handled) return;
+                    const QByteArray command = c->readAll();
+                    if (command.isEmpty()) return;
+                    *handled = true;
+                    if (command.contains("quit")) app.quit();
+                    else if (command.contains("show")) showWindow();
+                    c->disconnectFromServer();
+                };
+                QObject::connect(c, &QLocalSocket::readyRead, c, handle);
+                QObject::connect(c, &QLocalSocket::disconnected, c,
+                                 &QLocalSocket::deleteLater);
+                // The peer may have written before newConnection was handled.
+                if (c->bytesAvailable() > 0 || c->waitForReadyRead(200)) handle();
+            }
+        });
+    }
+
+    if (interactive) app.setQuitOnLastWindowClosed(false);
+
+    if (trayAvailable && interactive) {
+        auto* tray = new QSystemTrayIcon(QIcon::fromTheme(QStringLiteral("mutekizu")), &app);
+        auto* menu = new QMenu();
+        QAction* show = menu->addAction(QStringLiteral("Открыть Mutekizu"));
+        menu->addSeparator();
+        QAction* quit = menu->addAction(QStringLiteral("Выход"));
+        QObject::connect(show, &QAction::triggered, &app, showWindow);
+        QObject::connect(quit, &QAction::triggered, &app, &QApplication::quit);
+        QObject::connect(tray, &QSystemTrayIcon::activated, &app,
+                         [showWindow](QSystemTrayIcon::ActivationReason reason) {
+                             if (reason == QSystemTrayIcon::Trigger ||
+                                 reason == QSystemTrayIcon::DoubleClick)
+                                 showWindow();
+                         });
+        tray->setContextMenu(menu);
+        tray->setToolTip(QString::fromUtf8(kDisplayName));
+        tray->show();
+    }
+
+    // Background does not depend on a tray host: Hyprland/GNOME sessions may
+    // not expose StatusNotifierItem. The desktop entry is single-instance and
+    // asks the hidden process to show its window.
+    if (interactive && parser.isSet("background")) window->hide();
+
     if (parser.isSet("screenshot")) {
         const QString path = parser.value("screenshot");
-        auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().first());
-        if (!window) return 2;
         window->show();
         QTimer::singleShot(900, &app, [window, path, &app] {
             const QImage img = window->grabWindow();

@@ -33,6 +33,15 @@ ApplicationWindow {
     Material.background: Theme.surface
     Material.foreground: Theme.text
 
+    onClosing: function(close) {
+        if (trayAvailable) {
+            close.accepted = false
+            visible = false
+        } else {
+            Qt.quit()
+        }
+    }
+
     Component.onCompleted: {
         pageIndex = pageFromName(initialPage)
         if (initialTheme === "dark") Theme.dark = true
