@@ -1,3 +1,5 @@
+[![build](https://github.com/0xcds4r/mutekizu/actions/workflows/build.yml/badge.svg)](https://github.com/0xcds4r/mutekizu/actions/workflows/build.yml)
+
 # mutekizu
 
 Локальный обход **узкого класса** DPI-фильтрации для TCP/TLS. Два независимых
